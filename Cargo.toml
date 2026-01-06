@@ -1,6 +1,78 @@
 [package]
 name = "piebash"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "Universal Linux-based terminal with code execution"
+license = "MIT"
+repository = "https://github.com/yourusername/piebash"
+
+[[bin]]
+name = "piebash"
+path = "src/main.rs"
 
 [dependencies]
+
+rustyline = "13.0"
+crossterm = "0.27"
+colored = "2.1"
+
+
+tokio = { version = "1.36", features = ["full"] }
+futures = "0.3"
+
+
+reqwest = { version = "0.11", features = ["stream", "blocking"] }
+
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+
+walkdir = "2.4"
+dirs = "5.0"         
+tempfile = "3.10"
+
+# Archives
+zip = "0.6"
+tar = "0.4"
+flate2 = "1.0"
+xz2 = "0.1"
+
+
+which = "6.0"
+
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.28", features = ["process", "signal"] }
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["processthreadsapi", "winbase"] }
+
+
+anyhow = "1.0"
+thiserror = "1.0"
+
+
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+
+sha2 = "0.10"
+regex = "1.10"
+chrono = "0.4"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.1"
+tempfile = "3.10"
+
+[profile.dev]
+opt-level = 0
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

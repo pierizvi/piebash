@@ -1,0 +1,43 @@
+{
+  "version": "1.0.0",
+  "languages": {
+    "python": {
+      "name": "Python",
+      "version": "3.11.6",
+      "executable": "python",
+      "downloads": {
+        "linux-x86_64": {
+          "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz",
+          "sha256": ""
+        },
+        "windows-x86_64": {
+          "url": "https://www.python.org/ftp/python/3.11.6/python-3.11.6-embed-amd64.zip",
+          "sha256": ""
+        },
+        "darwin-x86_64": {
+          "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-apple-darwin-install_only.tar.gz",
+          "sha256": ""
+        }
+      }
+    },
+    "node": {
+      "name": "Node.js",
+      "version": "20.10.0",
+      "executable": "node",
+      "downloads": {
+        "linux-x86_64": {
+          "url": "https://nodejs.org/dist/v20.10.0/node-v20.10.0-linux-x64.tar.xz",
+          "sha256": ""
+        },
+        "windows-x86_64": {
+          "url": "https://nodejs.org/dist/v20.10.0/node-v20.10.0-win-x64.zip",
+          "sha256": ""
+        },
+        "darwin-x86_64": {
+          "url": "https://nodejs.org/dist/v20.10.0/node-v20.10.0-darwin-x64.tar.gz",
+          "sha256": ""
+        }
+      }
+    }
+  }
+}
