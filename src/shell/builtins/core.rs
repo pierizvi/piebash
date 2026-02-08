@@ -61,27 +61,60 @@ pub fn export(command: &Command, env: &mut Environment) -> Result<()> {
     Ok(())
 }
 
+pub fn env(environment: &Environment) -> Result<()> {
+    let mut vars: Vec<_> = environment.get_all_vars().iter().collect();
+    vars.sort_by_key(|(k, _)| *k);
+    
+    for (key, value) in vars {
+        println!("{}={}", key, value);
+    }
+    Ok(())
+}
+
 pub fn help() -> Result<()> {
-    println!("{}", "PieBash - Universal Terminal".green().bold());
+    println!("{}", "╔═══════════════════════════════════════════════╗".cyan());
+    println!("{}", "║          PieBash - Command Reference          ║".cyan().bold());
+    println!("{}", "╚═══════════════════════════════════════════════╝".cyan());
     println!();
-    println!("{}", "Built-in Commands:".yellow().bold());
-    println!("  {}  - Change directory", "cd <dir>".cyan());
-    println!("  {}    - Print working directory", "pwd".cyan());
+    
+    println!("{}", " File & Directory Commands:".yellow().bold());
+    println!("  {}    - List directory contents", "ls [-la]".cyan());
+    println!("  {}     - Change directory", "cd <dir>".cyan());
+    println!("  {}      - Print working directory", "pwd".cyan());
+    println!("  {}    - Display file contents", "cat <file>".cyan());
+    println!("  {}  - Create empty file", "touch <file>".cyan());
+    println!("  {} - Create directory", "mkdir <dir>".cyan());
+    println!("  {}   - Remove file/directory", "rm [-rf] <file>".cyan());
+    println!("  {}   - Copy file", "cp <src> <dst>".cyan());
+    println!("  {}   - Move/rename file", "mv <src> <dst>".cyan());
+    println!();
+    
+    println!("{}", " Text Processing:".yellow().bold());
     println!("  {}   - Print text", "echo <text>".cyan());
+    println!("  {} - Search in files", "grep <pattern> <file>".cyan());
+    println!();
+    
+    println!("{}", " System Commands:".yellow().bold());
     println!("  {} - Set environment variable", "export VAR=value".cyan());
+    println!("  {}     - Show all variables", "env".cyan());
     println!("  {}   - Clear screen", "clear".cyan());
     println!("  {}    - Show this help", "help".cyan());
     println!("  {}    - Exit shell", "exit".cyan());
     println!();
-    println!("{}", "Code Execution:".yellow().bold());
+    
+    println!("{}", " Code Execution:".yellow().bold());
     println!("  {} - Execute Python script", "python script.py".cyan());
     println!("  {}   - Execute Node.js script", "node app.js".cyan());
     println!("  {} - Execute Java file", "java Main.java".cyan());
     println!("  {} - Execute inline code", "@python print('hi')".cyan());
     println!();
-    println!("{}", "Note:".yellow());
-    println!("  Language runtimes are auto-downloaded when needed!");
+    
+    println!("{}", " Tips:".yellow());
+    println!("  • Language runtimes auto-download when needed");
+    println!("  • Use {} for home directory", "~".cyan());
+    println!("  • Tab completion coming soon!");
     println!();
+    
     Ok(())
 }
 

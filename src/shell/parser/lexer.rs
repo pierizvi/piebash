@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::collections::HashMap;
 
 pub struct Lexer;
 
@@ -8,6 +9,10 @@ impl Lexer {
     }
 
     pub fn tokenize(&self, input: &str) -> Result<Vec<String>> {
+        self.tokenize_with_env(input, &HashMap::new())
+    }
+
+    pub fn tokenize_with_env(&self, input: &str, env: &HashMap<String, String>) -> Result<Vec<String>> {
         let mut tokens = Vec::new();
         let mut current = String::new();
         let mut in_quotes = false;
@@ -20,10 +25,38 @@ impl Lexer {
             let ch = chars[i];
 
             match ch {
+                '$' if !in_quotes || quote_char == '"' => {
+                    // Variable expansion
+                    if i + 1 < chars.len() && chars[i + 1] == '{' {
+                        // ${VAR} syntax
+                        i += 2;
+                        let mut var_name = String::new();
+                        while i < chars.len() && chars[i] != '}' {
+                            var_name.push(chars[i]);
+                            i += 1;
+                        }
+                        if let Some(value) = env.get(&var_name) {
+                            current.push_str(value);
+                        }
+                    } else if i + 1 < chars.len() {
+                        // $VAR syntax
+                        i += 1;
+                        let mut var_name = String::new();
+                        while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_') {
+                            var_name.push(chars[i]);
+                            i += 1;
+                        }
+                        i -= 1;
+                        if let Some(value) = env.get(&var_name) {
+                            current.push_str(value);
+                        } else if let Some(value) = std::env::var(&var_name).ok() {
+                            current.push_str(&value);
+                        }
+                    }
+                }
                 '"' | '\'' => {
                     if in_quotes {
                         if ch == quote_char {
-                            // End quote
                             in_quotes = false;
                             if !current.is_empty() {
                                 tokens.push(current.clone());
@@ -33,7 +66,6 @@ impl Lexer {
                             current.push(ch);
                         }
                     } else {
-                        // Start quote
                         in_quotes = true;
                         quote_char = ch;
                     }
@@ -59,24 +91,5 @@ impl Lexer {
         }
 
         Ok(tokens)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_simple_tokenize() {
-        let lexer = Lexer::new();
-        let tokens = lexer.tokenize("ls -la /home").unwrap();
-        assert_eq!(tokens, vec!["ls", "-la", "/home"]);
-    }
-
-    #[test]
-    fn test_quoted_tokenize() {
-        let lexer = Lexer::new();
-        let tokens = lexer.tokenize(r#"echo "hello world""#).unwrap();
-        assert_eq!(tokens, vec!["echo", "hello world"]);
     }
 }

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use colored::*;
 use rustyline::error::ReadlineError;
-use rustyline::DefaultEditor;
+use rustyline::{DefaultEditor, Config, CompletionType, EditMode};
 
 mod shell;
 mod runtime;
@@ -24,8 +24,14 @@ async fn main() -> Result<()> {
     // Initialize shell
     let mut shell = Shell::new().await?;
 
-    // Initialize readline
-    let mut rl = DefaultEditor::new()?;
+    // Configure readline with better settings
+    let config = Config::builder()
+        .history_ignore_space(true)
+        .completion_type(CompletionType::List)
+        .edit_mode(EditMode::Emacs)
+        .build();
+
+    let mut rl = DefaultEditor::with_config(config)?;
 
     // Load history
     let history_file = shell.get_history_file();
@@ -33,7 +39,7 @@ async fn main() -> Result<()> {
 
     // Main REPL loop
     loop {
-        // Get prompt
+        // Get prompt (plain text, no ANSI codes)
         let prompt = shell.get_prompt();
 
         // Read line
@@ -52,7 +58,7 @@ async fn main() -> Result<()> {
 
                 // Check for exit
                 if line == "exit" || line == "quit" {
-                    println!("Goodbye! 👋");
+                    println!("{}", "Goodbye! 👋".green());
                     break;
                 }
 
