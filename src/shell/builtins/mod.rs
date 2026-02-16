@@ -1,6 +1,8 @@
 pub mod core;
 pub mod filesystem;
 pub mod text;
+pub mod network;
+pub mod utils;
 
 use anyhow::Result;
 use crate::shell::parser::Command;
@@ -36,6 +38,19 @@ impl Builtins {
                 "help".to_string(),
                 "clear".to_string(),
                 "env".to_string(),
+                
+                // Network
+                "wget".to_string(),
+                "curl".to_string(),
+                
+                // Utilities
+                "find".to_string(),
+                "wc".to_string(),
+                "head".to_string(),
+                "tail".to_string(),
+                "sort".to_string(),
+                "uniq".to_string(),
+                "which".to_string(),
             ],
         }
     }
@@ -69,7 +84,27 @@ impl Builtins {
             "clear" => core::clear(),
             "env" => core::env(env),
             
+            // Utilities
+            "find" => utils::find(command),
+            "wc" => utils::wc(command),
+            "head" => utils::head(command),
+            "tail" => utils::tail(command),
+            "sort" => utils::sort_cmd(command),
+            "uniq" => utils::uniq_cmd(command),
+            "which" => utils::which_cmd(command),
+            
             _ => anyhow::bail!("Unknown built-in: {}", command.name),
+        }
+    }
+    
+    pub async fn execute_async(&self, command: &Command, env: &mut Environment) -> Result<()> {
+        match command.name.as_str() {
+            // Async network commands
+            "wget" => network::wget(command).await,
+            "curl" => network::curl(command).await,
+            
+            // All other commands are sync
+            _ => self.execute(command, env),
         }
     }
 }
