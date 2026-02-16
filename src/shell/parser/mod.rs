@@ -1,7 +1,7 @@
 pub mod command;
 pub mod lexer;
 
-pub use command::{Command, Redirect};
+pub use command::{Command, Redirect, ChainOperator};
 use anyhow::Result;
 use self::lexer::Lexer;
 use std::collections::HashMap;
@@ -22,6 +22,11 @@ impl CommandParser {
     }
 
     pub fn parse_with_env(&self, input: &str, env: &HashMap<String, String>) -> Result<Command> {
+        // Check for command chaining (&&, ||, ;)
+        if let Some(cmd) = self.try_parse_chain(input, env)? {
+            return Ok(cmd);
+        }
+
         // Check for pipes
         if input.contains('|') {
             return self.parse_pipeline_with_env(input, env);
@@ -34,6 +39,40 @@ impl CommandParser {
 
         // Simple command
         self.parse_simple_with_env(input, env)
+    }
+
+    fn try_parse_chain(&self, input: &str, env: &HashMap<String, String>) -> Result<Option<Command>> {
+        // Check for && (must check before single &)
+        if input.contains("&&") {
+            let parts: Vec<&str> = input.splitn(2, "&&").collect();
+            if parts.len() == 2 {
+                let first = self.parse_with_env(parts[0].trim(), env)?;
+                let second = self.parse_with_env(parts[1].trim(), env)?;
+                return Ok(Some(first.with_chain(ChainOperator::And, second)));
+            }
+        }
+
+        // Check for ||
+        if input.contains("||") {
+            let parts: Vec<&str> = input.splitn(2, "||").collect();
+            if parts.len() == 2 {
+                let first = self.parse_with_env(parts[0].trim(), env)?;
+                let second = self.parse_with_env(parts[1].trim(), env)?;
+                return Ok(Some(first.with_chain(ChainOperator::Or, second)));
+            }
+        }
+
+        // Check for ;
+        if input.contains(';') {
+            let parts: Vec<&str> = input.splitn(2, ';').collect();
+            if parts.len() == 2 {
+                let first = self.parse_with_env(parts[0].trim(), env)?;
+                let second = self.parse_with_env(parts[1].trim(), env)?;
+                return Ok(Some(first.with_chain(ChainOperator::Semicolon, second)));
+            }
+        }
+
+        Ok(None)
     }
 
     fn parse_simple_with_env(&self, input: &str, env: &HashMap<String, String>) -> Result<Command> {

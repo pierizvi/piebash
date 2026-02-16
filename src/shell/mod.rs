@@ -46,15 +46,65 @@ impl Shell {
     }
 
     pub async fn execute(&mut self, input: &str) -> Result<()> {
-        // Parse command with environment variables
         let env_map = self.environment.get_all_vars().clone();
         let command = self.parser.parse_with_env(input, &env_map)?;
 
+        // Handle command chains (&&, ||, ;)
+        self.execute_command_chain(&command).await
+    }
+
+    async fn execute_command_chain(&mut self, command: &parser::Command) -> Result<()> {
+        let mut current_command = command;
+        let mut last_result: Result<()> = Ok(());
+
+        loop {
+            // Execute the current command
+            last_result = self.execute_single_command(current_command).await;
+            
+            // Check if there's a chained command
+            if let Some(ref next_cmd) = current_command.next_command {
+                match current_command.chain_operator {
+                    Some(parser::ChainOperator::And) => {
+                        // && - continue only if last succeeded
+                        if last_result.is_err() {
+                            return last_result;
+                        }
+                    }
+                    Some(parser::ChainOperator::Or) => {
+                        // || - continue only if last failed
+                        if last_result.is_ok() {
+                            return last_result;
+                        }
+                    }
+                    Some(parser::ChainOperator::Semicolon) => {
+                        // ; - always continue (ignore last result)
+                    }
+                    None => {
+                        break;
+                    }
+                }
+                
+                // Move to next command
+                current_command = next_cmd;
+            } else {
+                // No more commands
+                break;
+            }
+        }
+        
+        last_result
+    }
+
+    async fn execute_single_command(&mut self, command: &parser::Command) -> Result<()> {
         // Handle pipes specially
-        if command.pipe_to.is_some() {
-            return self.execute_pipeline(&command).await;
+        if command.name == "piebash" {
+            anyhow::bail!("Cannot run piebash inside piebash. Use 'exit' to return to the parent shell.");
         }
 
+        // Handle pipes specially
+        if command.pipe_to.is_some() {
+            return self.execute_pipeline(&command).await
+        }
         // Check if it's a built-in
         if self.builtins.is_builtin(&command.name) {
             return self.execute_builtin(&command).await;
@@ -121,9 +171,6 @@ impl Shell {
     }
 
     fn capture_builtin_output(&mut self, command: &parser::Command) -> Result<String> {
-        use std::io::{self, Write};
-        use std::sync::{Arc, Mutex};
-
         match command.name.as_str() {
             "echo" => {
                 Ok(command.args.join(" ") + "\n")
@@ -132,11 +179,9 @@ impl Shell {
                 Ok(format!("{}\n", self.environment.get_cwd().display()))
             }
             "ls" => {
-                // Capture ls output
                 self.capture_ls_output(command)
             }
             "cat" => {
-                // Capture cat output
                 self.capture_cat_output(command)
             }
             "env" => {
@@ -149,7 +194,6 @@ impl Shell {
                 Ok(output)
             }
             _ => {
-                // For other commands, execute normally and return empty
                 self.builtins.execute(&command, &mut self.environment)?;
                 Ok(String::new())
             }
@@ -202,13 +246,12 @@ impl Shell {
 
             let metadata = entry.metadata()?;
             if metadata.is_dir() {
-                output.push_str(&format!("{}/  ", name));
+                output.push_str(&format!("{}/\n", name));
             } else {
-                output.push_str(&format!("{}  ", name));
+                output.push_str(&format!("{}\n", name));
             }
         }
         
-        output.push('\n');
         Ok(output)
     }
 
@@ -232,7 +275,6 @@ impl Shell {
     async fn execute_builtin_with_input(&mut self, command: &parser::Command, input: &str) -> Result<()> {
         match command.name.as_str() {
             "grep" => {
-                // grep pattern - filter lines from input
                 if command.args.is_empty() {
                     anyhow::bail!("grep: missing pattern");
                 }
@@ -247,7 +289,6 @@ impl Shell {
                 Ok(())
             }
             _ => {
-                // For other commands, just execute normally
                 self.builtins.execute(&command, &mut self.environment)
             }
         }
@@ -283,13 +324,19 @@ impl Shell {
         let cwd = self.environment.get_cwd();
         let home = self.environment.get_home_dir();
         
+        // Determine what to display
         let display = if cwd == &home {
+            // Exactly at home directory
             "~".to_string()
         } else {
+            // Show just the directory name (last component)
             cwd.file_name()
                 .and_then(|n| n.to_str())
-                .unwrap_or("~")
-                .to_string()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| {
+                    // If no file_name (at root), show the full path
+                    cwd.display().to_string().replace('\\', "/")
+                })
         };
         
         format!("{}> ", display)

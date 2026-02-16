@@ -37,12 +37,12 @@ async fn main() -> Result<()> {
     let history_file = shell.get_history_file();
     let _ = rl.load_history(&history_file);
 
+        // Read line
     // Main REPL loop
     loop {
         // Get prompt (plain text, no ANSI codes)
         let prompt = shell.get_prompt();
 
-        // Read line
         let readline = rl.readline(&prompt);
 
         match readline {
@@ -58,7 +58,7 @@ async fn main() -> Result<()> {
 
                 // Check for exit
                 if line == "exit" || line == "quit" {
-                    println!("{}", "Goodbye! 👋".green());
+                    println!("{}", "exiting....".green());
                     break;
                 }
 

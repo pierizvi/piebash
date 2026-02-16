@@ -13,7 +13,7 @@ impl LanguageDetector {
         extensions.insert("py".to_string(), "python".to_string());
         extensions.insert("pyw".to_string(), "python".to_string());
 
-        // JavaScript
+        // JavaScript/Node.js
         extensions.insert("js".to_string(), "node".to_string());
         extensions.insert("mjs".to_string(), "node".to_string());
         extensions.insert("cjs".to_string(), "node".to_string());
@@ -32,6 +32,14 @@ impl LanguageDetector {
 
         // PHP
         extensions.insert("php".to_string(), "php".to_string());
+
+        // C/C++
+        extensions.insert("c".to_string(), "gcc".to_string());
+        extensions.insert("cpp".to_string(), "g++".to_string());
+        extensions.insert("cc".to_string(), "g++".to_string());
+
+        // Shell
+        extensions.insert("sh".to_string(), "bash".to_string());
 
         // Perl
         extensions.insert("pl".to_string(), "perl".to_string());

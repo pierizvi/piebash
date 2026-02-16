@@ -6,14 +6,29 @@ use crate::shell::environment::Environment;
 
 pub fn cd(command: &Command, env: &mut Environment) -> Result<()> {
     let target = if command.args.is_empty() {
+        // No args - go to home
         env.get_home_dir()
     } else {
         let path = &command.args[0];
+        
         if path == "~" {
             env.get_home_dir()
         } else if path.starts_with("~/") {
+            // ~/something - relative to home
             env.get_home_dir().join(&path[2..])
+        } else if path.starts_with('/') || path.contains(':') {
+            // Absolute path (Unix or Windows)
+            std::path::PathBuf::from(path)
+        } else if path == ".." {
+            // Go up one directory
+            env.get_cwd().parent()
+                .ok_or_else(|| anyhow::anyhow!("cd: already at root"))?
+                .to_path_buf()
+        } else if path == "." {
+            // Stay in current directory
+            env.get_cwd().clone()
         } else {
+            // Relative path from current directory
             env.get_cwd().join(path)
         }
     };
@@ -29,7 +44,6 @@ pub fn cd(command: &Command, env: &mut Environment) -> Result<()> {
     env.set_cwd(target)?;
     Ok(())
 }
-
 pub fn pwd(env: &Environment) -> Result<()> {
     println!("{}", env.get_cwd().display());
     Ok(())

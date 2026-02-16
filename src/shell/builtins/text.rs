@@ -19,7 +19,7 @@ pub fn grep(command: &Command) -> Result<()> {
     }
 
     for file in &command.args[1..] {
-        let path = Path::new(file.as_str());  // FIX: Explicit type
+        let path = Path::new(file.as_str());  
         
         if !path.exists() {
             eprintln!("grep: {}: No such file or directory", file);
