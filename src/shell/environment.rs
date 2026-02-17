@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 pub struct Environment {
     vars: HashMap<String, String>,
+    aliases: HashMap<String, String>,
     cwd: PathBuf,
     home_dir: PathBuf,
 }
@@ -13,12 +14,10 @@ impl Environment {
     pub fn new() -> Result<Self> {
         let mut vars = HashMap::new();
 
-        // Copy system environment
         for (key, value) in env::vars() {
             vars.insert(key, value);
         }
 
-        // Set PieBash-specific vars
         let home_dir = dirs::home_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
 
@@ -32,6 +31,7 @@ impl Environment {
 
         Ok(Self {
             vars,
+            aliases: HashMap::new(),
             cwd,
             home_dir,
         })
@@ -43,6 +43,10 @@ impl Environment {
 
     pub fn set_var(&mut self, key: &str, value: &str) {
         self.vars.insert(key.to_string(), value.to_string());
+    }
+
+    pub fn unset_var(&mut self, key: &str) {
+        self.vars.remove(key);
     }
 
     pub fn get_all_vars(&self) -> &HashMap<String, String> {
@@ -61,5 +65,21 @@ impl Environment {
 
     pub fn get_home_dir(&self) -> PathBuf {
         self.home_dir.clone()
+    }
+
+    pub fn set_alias(&mut self, name: String, value: String) {
+        self.aliases.insert(name, value);
+    }
+
+    pub fn get_alias(&self, name: &str) -> Option<String> {
+        self.aliases.get(name).cloned()
+    }
+
+    pub fn get_aliases(&self) -> &HashMap<String, String> {
+        &self.aliases
+    }
+
+    pub fn remove_alias(&mut self, name: &str) {
+        self.aliases.remove(name);
     }
 }

@@ -16,42 +16,14 @@ impl Builtins {
     pub fn new() -> Self {
         Self {
             commands: vec![
-                // Navigation
-                "cd".to_string(),
-                "pwd".to_string(),
-                
-                // File operations
-                "ls".to_string(),
-                "cat".to_string(),
-                "touch".to_string(),
-                "mkdir".to_string(),
-                "rm".to_string(),
-                "cp".to_string(),
-                "mv".to_string(),
-                
-                // Text processing
-                "echo".to_string(),
-                "grep".to_string(),
-                
-                // System
-                "export".to_string(),
-                "help".to_string(),
-                "clear".to_string(),
-                "env".to_string(),
-                
-                // Network
-                "wget".to_string(),
-                "curl".to_string(),
-                
-                // Utilities
-                "find".to_string(),
-                "wc".to_string(),
-                "head".to_string(),
-                "tail".to_string(),
-                "sort".to_string(),
-                "uniq".to_string(),
-                "which".to_string(),
-            ],
+                "cd", "pwd", "echo", "export", "env", "set", "unset",
+                "alias", "unalias", "help", "clear", "history",
+                "ls", "cat", "touch", "mkdir", "rm", "cp", "mv", "ln",
+                "chmod", "chown", "stat", "file",
+                "grep", "find", "wc", "head", "tail", "sort", "uniq", "which",
+                "wget", "curl",
+                "true", "false", "sleep", "kill", "type",
+            ].into_iter().map(String::from).collect(),
         }
     }
 
@@ -61,50 +33,57 @@ impl Builtins {
 
     pub fn execute(&self, command: &Command, env: &mut Environment) -> Result<()> {
         match command.name.as_str() {
-            // Navigation
-            "cd" => core::cd(command, env),
-            "pwd" => core::pwd(env),
-            
-            // File operations
-            "ls" => filesystem::ls(command, env),
-            "cat" => filesystem::cat(command),
-            "touch" => filesystem::touch(command),
-            "mkdir" => filesystem::mkdir(command),
-            "rm" => filesystem::rm(command),
-            "cp" => filesystem::cp(command),
-            "mv" => filesystem::mv(command),
-            
-            // Text processing
-            "echo" => core::echo(command),
-            "grep" => text::grep(command),
-            
-            // System
-            "export" => core::export(command, env),
-            "help" => core::help(),
-            "clear" => core::clear(),
-            "env" => core::env(env),
-            
-            // Utilities
-            "find" => utils::find(command),
-            "wc" => utils::wc(command),
-            "head" => utils::head(command),
-            "tail" => utils::tail(command),
-            "sort" => utils::sort_cmd(command),
-            "uniq" => utils::uniq_cmd(command),
-            "which" => utils::which_cmd(command),
-            
-            _ => anyhow::bail!("Unknown built-in: {}", command.name),
+            "cd"       => core::cd(command, env),
+            "pwd"      => core::pwd(env),
+            "echo"     => core::echo(command),
+            "export"   => core::export(command, env),
+            "env"      => core::env_cmd(env),
+            "set"      => core::set_cmd(command, env),
+            "unset"    => core::unset(command, env),
+            "alias"    => core::alias_cmd(command, env),
+            "unalias"  => core::unalias_cmd(command, env),
+            "history"  => core::history_cmd(env),
+            "type"     => core::type_cmd(command),
+            "help"     => core::help(),
+            "clear"    => core::clear(),
+            "true"     => core::true_cmd(),
+            "false"    => core::false_cmd(),
+            "yes"      => core::yes_cmd(command),
+            "sleep"    => core::sleep_cmd(command),
+            "kill"     => core::kill_cmd(command),
+
+            "ls"       => filesystem::ls(command, env),
+            "cat"      => filesystem::cat(command),
+            "touch"    => filesystem::touch(command),
+            "mkdir"    => filesystem::mkdir(command),
+            "rm"       => filesystem::rm(command),
+            "cp"       => filesystem::cp(command),
+            "mv"       => filesystem::mv(command),
+            "ln"       => filesystem::ln(command),
+            "chmod"    => filesystem::chmod(command),
+            "chown"    => filesystem::chown(command),
+            "stat"     => filesystem::stat(command),
+            "file"     => filesystem::file_cmd(command),
+
+            "grep"     => text::grep(command),
+
+            "find"     => utils::find(command),
+            "wc"       => utils::wc(command),
+            "head"     => utils::head(command),
+            "tail"     => utils::tail(command),
+            "sort"     => utils::sort_cmd(command),
+            "uniq"     => utils::uniq_cmd(command),
+            "which"    => utils::which_cmd(command),
+
+            _          => anyhow::bail!("Unknown built-in: {}", command.name),
         }
     }
-    
+
     pub async fn execute_async(&self, command: &Command, env: &mut Environment) -> Result<()> {
         match command.name.as_str() {
-            // Async network commands
             "wget" => network::wget(command).await,
             "curl" => network::curl(command).await,
-            
-            // All other commands are sync
-            _ => self.execute(command, env),
+            _      => self.execute(command, env),
         }
     }
 }
