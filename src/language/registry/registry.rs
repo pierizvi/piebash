@@ -12,7 +12,15 @@ pub struct LanguageDefinition {
     pub name: String,
     pub version: String,
     pub executable: String,
+    pub package_manager: Option<PackageManager>,
     pub downloads: HashMap<String, DownloadInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PackageManager {
+    pub name: String,
+    pub executable: String,
+    pub install_cmd: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,11 +46,16 @@ impl Default for LanguageRegistry {
     fn default() -> Self {
         let mut languages = HashMap::new();
 
-        // Python
+        // Python - FULL VERSION with pip (standalone builds)
         languages.insert("python".to_string(), LanguageDefinition {
             name: "Python".to_string(),
             version: "3.11.6".to_string(),
             executable: "python".to_string(),
+            package_manager: Some(PackageManager {
+                name: "pip".to_string(),
+                executable: "pip".to_string(),
+                install_cmd: vec!["install".to_string()],
+            }),
             downloads: {
                 let mut map = HashMap::new();
                 map.insert("linux-x86_64".to_string(), DownloadInfo {
@@ -50,7 +63,8 @@ impl Default for LanguageRegistry {
                     sha256: "".to_string(),
                 });
                 map.insert("windows-x86_64".to_string(), DownloadInfo {
-                    url: "https://www.python.org/ftp/python/3.11.6/python-3.11.6-embed-amd64.zip".to_string(),
+                    // CHANGED: Use full install_only build instead of embed
+                    url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-pc-windows-msvc-install_only.tar.gz".to_string(),
                     sha256: "".to_string(),
                 });
                 map.insert("darwin-x86_64".to_string(), DownloadInfo {
@@ -61,11 +75,16 @@ impl Default for LanguageRegistry {
             },
         });
 
-        // Node.js
+        // Node.js with npm
         languages.insert("node".to_string(), LanguageDefinition {
             name: "Node.js".to_string(),
             version: "20.10.0".to_string(),
             executable: "node".to_string(),
+            package_manager: Some(PackageManager {
+                name: "npm".to_string(),
+                executable: "npm".to_string(),
+                install_cmd: vec!["install".to_string(), "-g".to_string()],
+            }),
             downloads: {
                 let mut map = HashMap::new();
                 map.insert("linux-x86_64".to_string(), DownloadInfo {
@@ -89,6 +108,11 @@ impl Default for LanguageRegistry {
             name: "Go".to_string(),
             version: "1.21.5".to_string(),
             executable: "go".to_string(),
+            package_manager: Some(PackageManager {
+                name: "go".to_string(),
+                executable: "go".to_string(),
+                install_cmd: vec!["install".to_string()],
+            }),
             downloads: {
                 let mut map = HashMap::new();
                 map.insert("linux-x86_64".to_string(), DownloadInfo {
@@ -112,6 +136,11 @@ impl Default for LanguageRegistry {
             name: "Rust".to_string(),
             version: "1.75.0".to_string(),
             executable: "rustc".to_string(),
+            package_manager: Some(PackageManager {
+                name: "cargo".to_string(),
+                executable: "cargo".to_string(),
+                install_cmd: vec!["install".to_string()],
+            }),
             downloads: {
                 let mut map = HashMap::new();
                 map.insert("linux-x86_64".to_string(), DownloadInfo {
@@ -119,7 +148,7 @@ impl Default for LanguageRegistry {
                     sha256: "".to_string(),
                 });
                 map.insert("windows-x86_64".to_string(), DownloadInfo {
-                    url: "https://static.rust-lang.org/dist/rust-1.75.0-x86_64-pc-windows-msvc.zip".to_string(),
+                    url: "https://static.rust-lang.org/dist/rust-1.75.0-x86_64-pc-windows-msvc.tar.gz".to_string(),
                     sha256: "".to_string(),
                 });
                 map.insert("darwin-x86_64".to_string(), DownloadInfo {
@@ -135,6 +164,11 @@ impl Default for LanguageRegistry {
             name: "Ruby".to_string(),
             version: "3.2.2".to_string(),
             executable: "ruby".to_string(),
+            package_manager: Some(PackageManager {
+                name: "gem".to_string(),
+                executable: "gem".to_string(),
+                install_cmd: vec!["install".to_string()],
+            }),
             downloads: {
                 let mut map = HashMap::new();
                 map.insert("linux-x86_64".to_string(), DownloadInfo {
@@ -142,34 +176,11 @@ impl Default for LanguageRegistry {
                     sha256: "".to_string(),
                 });
                 map.insert("windows-x86_64".to_string(), DownloadInfo {
-                    url: "https://github.com/oneclick/rubyinstaller2/releases/download/RubyInstaller-3.2.2-1/rubyinstaller-3.2.2-1-x64.zip".to_string(),
+                    url: "https://github.com/oneclick/rubyinstaller2/releases/download/RubyInstaller-3.2.2-1/rubyinstaller-3.2.2-1-x64.7z".to_string(),
                     sha256: "".to_string(),
                 });
                 map.insert("darwin-x86_64".to_string(), DownloadInfo {
                     url: "https://cache.ruby-lang.org/pub/ruby/3.2/ruby-3.2.2.tar.gz".to_string(),
-                    sha256: "".to_string(),
-                });
-                map
-            },
-        });
-
-        // Java (OpenJDK)
-        languages.insert("java".to_string(), LanguageDefinition {
-            name: "Java".to_string(),
-            version: "21.0.1".to_string(),
-            executable: "java".to_string(),
-            downloads: {
-                let mut map = HashMap::new();
-                map.insert("linux-x86_64".to_string(), DownloadInfo {
-                    url: "https://download.java.net/java/GA/jdk21.0.1/415e3f918a1f4062a0074a2794853d0d/12/GPL/openjdk-21.0.1_linux-x64_bin.tar.gz".to_string(),
-                    sha256: "".to_string(),
-                });
-                map.insert("windows-x86_64".to_string(), DownloadInfo {
-                    url: "https://download.java.net/java/GA/jdk21.0.1/415e3f918a1f4062a0074a2794853d0d/12/GPL/openjdk-21.0.1_windows-x64_bin.zip".to_string(),
-                    sha256: "".to_string(),
-                });
-                map.insert("darwin-x86_64".to_string(), DownloadInfo {
-                    url: "https://download.java.net/java/GA/jdk21.0.1/415e3f918a1f4062a0074a2794853d0d/12/GPL/openjdk-21.0.1_macos-x64_bin.tar.gz".to_string(),
                     sha256: "".to_string(),
                 });
                 map

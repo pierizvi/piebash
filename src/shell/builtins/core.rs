@@ -1,6 +1,6 @@
 use anyhow::Result;
 use colored::*;
-use std::process;
+
 
 use crate::shell::parser::Command;
 use crate::shell::environment::Environment;

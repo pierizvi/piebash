@@ -3,10 +3,12 @@ pub mod filesystem;
 pub mod text;
 pub mod network;
 pub mod utils;
+pub mod packages;
 
 use anyhow::Result;
 use crate::shell::parser::Command;
 use crate::shell::environment::Environment;
+use crate::runtime::RuntimeManager;
 
 pub struct Builtins {
     commands: Vec<String>,
@@ -23,6 +25,7 @@ impl Builtins {
                 "grep", "find", "wc", "head", "tail", "sort", "uniq", "which",
                 "wget", "curl",
                 "true", "false", "sleep", "kill", "type",
+                "pip", "npm", "cargo", "gem",  // ADDED: Package managers
             ].into_iter().map(String::from).collect(),
         }
     }
@@ -79,11 +82,44 @@ impl Builtins {
         }
     }
 
-    pub async fn execute_async(&self, command: &Command, env: &mut Environment) -> Result<()> {
+    pub async fn execute_async(
+        &self,
+        command: &Command,
+        env: &mut Environment,
+        runtime_manager: Option<&RuntimeManager>,
+    ) -> Result<()> {
         match command.name.as_str() {
             "wget" => network::wget(command).await,
             "curl" => network::curl(command).await,
-            _      => self.execute(command, env),
+            "pip" => {
+                if let Some(rm) = runtime_manager {
+                    packages::pip_install(command, rm).await
+                } else {
+                    anyhow::bail!("pip: runtime manager not available")
+                }
+            }
+            "npm" => {
+                if let Some(rm) = runtime_manager {
+                    packages::npm_install(command, rm).await
+                } else {
+                    anyhow::bail!("npm: runtime manager not available")
+                }
+            }
+            "cargo" => {
+                if let Some(rm) = runtime_manager {
+                    packages::cargo_install(command, rm).await
+                } else {
+                    anyhow::bail!("cargo: runtime manager not available")
+                }
+            }
+            "gem" => {
+                if let Some(rm) = runtime_manager {
+                    packages::gem_install(command, rm).await
+                } else {
+                    anyhow::bail!("gem: runtime manager not available")
+                }
+            }
+            _ => self.execute(command, env),
         }
     }
 }

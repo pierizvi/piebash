@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::fs::OpenOptions;
 use std::io::Write;
 
+
 use self::parser::CommandParser;
 use self::builtins::Builtins;
 use self::environment::Environment;
@@ -139,36 +140,25 @@ impl Shell {
     }
 
     async fn execute_builtin(&mut self, command: &parser::Command) -> Result<()> {
-        // Handle redirects for built-ins
-        if let Some(redirect) = &command.redirect_stdout {
-            match command.name.as_str() {
-                "echo" => {
-                    let output = command.args.join(" ");
-                    let mut file = if redirect.append {
-                        OpenOptions::new().create(true).append(true).open(&redirect.target)?
-                    } else {
-                        OpenOptions::new().create(true).write(true).truncate(true).open(&redirect.target)?
-                    };
-                    writeln!(file, "{}", output)?;
-                    return Ok(());
-                }
-                _ => {
-                    // Capture output and write to file
-                    let output = self.capture_builtin_output(&command)?;
-                    let mut file = if redirect.append {
-                        OpenOptions::new().create(true).append(true).open(&redirect.target)?
-                    } else {
-                        OpenOptions::new().create(true).write(true).truncate(true).open(&redirect.target)?
-                    };
-                    write!(file, "{}", output)?;
-                    return Ok(());
-                }
-            }
-        }
-
-        // No redirect, execute normally
-        self.builtins.execute(&command, &mut self.environment)
+    if let Some(redirect) = &command.redirect_stdout {
+        let output = match command.name.as_str() {
+            "echo" => command.args.join(" ") + "\n",
+            _ => self.capture_builtin_output(command)?,
+        };
+        let mut file = if redirect.append {
+            OpenOptions::new().create(true).append(true).open(&redirect.target)?
+        } else {
+            OpenOptions::new().create(true).write(true).truncate(true).open(&redirect.target)?
+        };
+        write!(file, "{}", output)?;
+        return Ok(());
     }
+
+    // Pass runtime_manager to async execute
+    self.builtins
+        .execute_async(command, &mut self.environment, Some(&self.runtime_manager))
+        .await
+}
 
     fn capture_builtin_output(&mut self, command: &parser::Command) -> Result<String> {
         match command.name.as_str() {
@@ -321,25 +311,35 @@ impl Shell {
     }
 
     pub fn get_prompt(&self) -> String {
+        use colored::*;
+        
         let cwd = self.environment.get_cwd();
         let home = self.environment.get_home_dir();
-        
-        // Determine what to display
-        let display = if cwd == &home {
-            // Exactly at home directory
+
+        let username = self.environment.get_var("USERNAME")
+            .or_else(|| self.environment.get_var("USER"))
+            .unwrap_or_else(|| "user".to_string());
+
+        let hostname = self.environment.get_var("COMPUTERNAME")
+            .or_else(|| self.environment.get_var("HOSTNAME"))
+            .unwrap_or_else(|| "DESKTOP".to_string());
+
+        let path_display = if cwd == &home {
             "~".to_string()
+        } else if let Ok(relative) = cwd.strip_prefix(&home) {
+            format!("~/{}", relative.display().to_string().replace('\\', "/"))
         } else {
-            // Show just the directory name (last component)
-            cwd.file_name()
-                .and_then(|n| n.to_str())
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| {
-                    // If no file_name (at root), show the full path
-                    cwd.display().to_string().replace('\\', "/")
-                })
+            cwd.display().to_string().replace('\\', "/")
         };
-        
-        format!("{}> ", display)
+
+        // Colored prompt - correct format
+        format!(
+            "{} {}@{} {}\n$ ",
+            "[piebash]".yellow().bold(),
+            username.green(),
+            hostname.green(),
+            path_display.blue()
+        )
     }
 
     pub fn get_history_file(&self) -> PathBuf {
