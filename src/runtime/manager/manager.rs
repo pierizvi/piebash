@@ -1,12 +1,12 @@
 use anyhow::{Context, Result};
-use std::path::PathBuf;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use crate::language::registry::LanguageRegistry;
 use crate::runtime::downloader::RuntimeDownloader;
 use crate::runtime::installer::RuntimeInstaller;
-use crate::language::registry::LanguageRegistry;
 
 #[derive(Clone)]
 pub struct RuntimeManager {
@@ -79,22 +79,27 @@ impl RuntimeManager {
         let download_info = lang_def.get_download_url(&platform)?;
 
         // Download
-        let archive_path = self.downloader
+        let archive_path = self
+            .downloader
             .download(&download_info.url, &download_info.sha256)
             .await?;
 
         println!("✅ Download complete");
 
         // Install
-        let runtime_dir = self.base_dir
+        let runtime_dir = self
+            .base_dir
             .join("runtimes")
             .join(format!("{}-{}", language, lang_def.version));
 
-        self.installer
-            .install(&archive_path, &runtime_dir)
-            .await?;
+        self.installer.install(&archive_path, &runtime_dir).await?;
 
-        println!("✅ {} {} installed to {}", language, lang_def.version, runtime_dir.display());
+        println!(
+            "✅ {} {} installed to {}",
+            language,
+            lang_def.version,
+            runtime_dir.display()
+        );
 
         // Find executable
         let executable = self.find_executable(&runtime_dir, &lang_def.executable)?;
@@ -141,7 +146,8 @@ impl RuntimeManager {
     }
 
     async fn parse_runtime_dir(&self, path: &PathBuf) -> Result<Option<RuntimeInfo>> {
-        let name = path.file_name()
+        let name = path
+            .file_name()
             .and_then(|n| n.to_str())
             .context("Invalid runtime directory name")?;
 
@@ -185,8 +191,29 @@ impl RuntimeManager {
         ];
 
         for candidate in candidates {
-            if candidate.exists() {
+            if candidate.is_file() {
                 return Ok(candidate);
+            }
+        }
+
+        // Fallback for archives that nest runtime files one directory deeper
+        #[cfg(windows)]
+        let exe_filename = format!("{}.exe", exe_name);
+        #[cfg(not(windows))]
+        let exe_filename = exe_name.to_string();
+
+        for entry in walkdir::WalkDir::new(runtime_dir)
+            .max_depth(4)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
+            if !entry.file_type().is_file() {
+                continue;
+            }
+
+            let file_name = entry.file_name().to_string_lossy();
+            if file_name == exe_name || file_name == exe_filename {
+                return Ok(entry.path().to_path_buf());
             }
         }
 

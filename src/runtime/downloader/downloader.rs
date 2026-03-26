@@ -1,9 +1,9 @@
 use anyhow::Result;
+use sha2::{Digest, Sha256};
 use std::path::PathBuf;
-use sha2::{Sha256, Digest};
 use tokio::io::AsyncWriteExt;
 
-#[derive(Clone)]  // FIXED: Added Clone
+#[derive(Clone)]
 pub struct RuntimeDownloader {
     cache_dir: PathBuf,
 }
@@ -17,26 +17,26 @@ impl RuntimeDownloader {
     }
 
     pub async fn download(&self, url: &str, expected_sha: &str) -> Result<PathBuf> {
-        let filename = url.split('/').last()
+        let filename = url
+            .split('/')
+            .last()
             .ok_or_else(|| anyhow::anyhow!("Invalid URL"))?;
 
         let dest = self.cache_dir.join(filename);
 
-        // Check if already downloaded
         if dest.exists() {
-            println!("📦 Using cached file");
-            if self.verify_checksum(&dest, expected_sha)? {
+            println!("Using cached file");
+            if self.verify_checksum(&dest, expected_sha)? && self.verify_archive_file(&dest)? {
                 return Ok(dest);
-            } else {
-                println!("⚠️  Cached file corrupted, re-downloading");
-                std::fs::remove_file(&dest)?;
             }
+
+            println!("Cached file is invalid, re-downloading");
+            std::fs::remove_file(&dest)?;
         }
 
-        // Download
-        println!("📥 Downloading from {}...", url);
-        
-        let response = reqwest::get(url).await?;
+        println!("Downloading from {}...", url);
+
+        let response = reqwest::get(url).await?.error_for_status()?;
         let total_size = response.content_length().unwrap_or(0);
 
         let mut file = tokio::fs::File::create(&dest).await?;
@@ -52,7 +52,8 @@ impl RuntimeDownloader {
 
             if total_size > 0 {
                 let progress = (downloaded as f64 / total_size as f64) * 100.0;
-                print!("\r📥 Progress: {:.1}% ({} / {} MB)", 
+                print!(
+                    "\rDownload progress: {:.1}% ({} / {} MB)",
                     progress,
                     downloaded / 1024 / 1024,
                     total_size / 1024 / 1024
@@ -64,10 +65,14 @@ impl RuntimeDownloader {
 
         println!();
 
-        // Verify checksum
         if !self.verify_checksum(&dest, expected_sha)? {
             std::fs::remove_file(&dest)?;
             anyhow::bail!("Checksum verification failed");
+        }
+
+        if !self.verify_archive_file(&dest)? {
+            std::fs::remove_file(&dest)?;
+            anyhow::bail!("Downloaded file is not a valid archive");
         }
 
         Ok(dest)
@@ -75,7 +80,7 @@ impl RuntimeDownloader {
 
     fn verify_checksum(&self, file: &PathBuf, expected: &str) -> Result<bool> {
         if expected.is_empty() {
-            return Ok(true); // Skip verification if no checksum provided
+            return Ok(true);
         }
 
         let contents = std::fs::read(file)?;
@@ -85,5 +90,26 @@ impl RuntimeDownloader {
         let hash = format!("{:x}", result);
 
         Ok(hash == expected)
+    }
+
+    fn verify_archive_file(&self, file: &PathBuf) -> Result<bool> {
+        use std::fs::File;
+        use std::io::Read;
+
+        let metadata = std::fs::metadata(file)?;
+        if metadata.len() < 1024 {
+            return Ok(false);
+        }
+
+        let mut fh = File::open(file)?;
+        let mut head = [0u8; 256];
+        let n = fh.read(&mut head)?;
+        let header_text = String::from_utf8_lossy(&head[..n]).to_ascii_lowercase();
+
+        if header_text.contains("not found") || header_text.contains("<html") {
+            return Ok(false);
+        }
+
+        Ok(true)
     }
 }

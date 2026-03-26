@@ -64,8 +64,8 @@ impl Default for LanguageRegistry {
                 });
                 map.insert("windows-x86_64".to_string(), DownloadInfo {
                     // CHANGED: Use full install_only build instead of embed
-                    url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-pc-windows-msvc-install_only.tar.gz".to_string(),
-                    sha256: "".to_string(),
+                    url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-pc-windows-msvc-shared-install_only.tar.gz".to_string(),
+                    sha256: "3933545e6d41462dd6a47e44133ea40995bc6efeed8c2e4cbdf1a699303e95ea".to_string(),
                 });
                 map.insert("darwin-x86_64".to_string(), DownloadInfo {
                     url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-apple-darwin-install_only.tar.gz".to_string(),
@@ -76,60 +76,87 @@ impl Default for LanguageRegistry {
         });
 
         // Node.js with npm
-        languages.insert("node".to_string(), LanguageDefinition {
-            name: "Node.js".to_string(),
-            version: "20.10.0".to_string(),
-            executable: "node".to_string(),
-            package_manager: Some(PackageManager {
-                name: "npm".to_string(),
-                executable: "npm".to_string(),
-                install_cmd: vec!["install".to_string(), "-g".to_string()],
-            }),
-            downloads: {
-                let mut map = HashMap::new();
-                map.insert("linux-x86_64".to_string(), DownloadInfo {
-                    url: "https://nodejs.org/dist/v20.10.0/node-v20.10.0-linux-x64.tar.xz".to_string(),
-                    sha256: "".to_string(),
-                });
-                map.insert("windows-x86_64".to_string(), DownloadInfo {
-                    url: "https://nodejs.org/dist/v20.10.0/node-v20.10.0-win-x64.zip".to_string(),
-                    sha256: "".to_string(),
-                });
-                map.insert("darwin-x86_64".to_string(), DownloadInfo {
-                    url: "https://nodejs.org/dist/v20.10.0/node-v20.10.0-darwin-x64.tar.gz".to_string(),
-                    sha256: "".to_string(),
-                });
-                map
+        languages.insert(
+            "node".to_string(),
+            LanguageDefinition {
+                name: "Node.js".to_string(),
+                version: "20.10.0".to_string(),
+                executable: "node".to_string(),
+                package_manager: Some(PackageManager {
+                    name: "npm".to_string(),
+                    executable: "npm".to_string(),
+                    install_cmd: vec!["install".to_string(), "-g".to_string()],
+                }),
+                downloads: {
+                    let mut map = HashMap::new();
+                    map.insert(
+                        "linux-x86_64".to_string(),
+                        DownloadInfo {
+                            url: "https://nodejs.org/dist/v20.10.0/node-v20.10.0-linux-x64.tar.xz"
+                                .to_string(),
+                            sha256: "".to_string(),
+                        },
+                    );
+                    map.insert(
+                        "windows-x86_64".to_string(),
+                        DownloadInfo {
+                            url: "https://nodejs.org/dist/v20.10.0/node-v20.10.0-win-x64.zip"
+                                .to_string(),
+                            sha256: "".to_string(),
+                        },
+                    );
+                    map.insert(
+                        "darwin-x86_64".to_string(),
+                        DownloadInfo {
+                            url: "https://nodejs.org/dist/v20.10.0/node-v20.10.0-darwin-x64.tar.gz"
+                                .to_string(),
+                            sha256: "".to_string(),
+                        },
+                    );
+                    map
+                },
             },
-        });
+        );
 
         // Go
-        languages.insert("go".to_string(), LanguageDefinition {
-            name: "Go".to_string(),
-            version: "1.21.5".to_string(),
-            executable: "go".to_string(),
-            package_manager: Some(PackageManager {
-                name: "go".to_string(),
+        languages.insert(
+            "go".to_string(),
+            LanguageDefinition {
+                name: "Go".to_string(),
+                version: "1.21.5".to_string(),
                 executable: "go".to_string(),
-                install_cmd: vec!["install".to_string()],
-            }),
-            downloads: {
-                let mut map = HashMap::new();
-                map.insert("linux-x86_64".to_string(), DownloadInfo {
-                    url: "https://go.dev/dl/go1.21.5.linux-amd64.tar.gz".to_string(),
-                    sha256: "".to_string(),
-                });
-                map.insert("windows-x86_64".to_string(), DownloadInfo {
-                    url: "https://go.dev/dl/go1.21.5.windows-amd64.zip".to_string(),
-                    sha256: "".to_string(),
-                });
-                map.insert("darwin-x86_64".to_string(), DownloadInfo {
-                    url: "https://go.dev/dl/go1.21.5.darwin-amd64.tar.gz".to_string(),
-                    sha256: "".to_string(),
-                });
-                map
+                package_manager: Some(PackageManager {
+                    name: "go".to_string(),
+                    executable: "go".to_string(),
+                    install_cmd: vec!["install".to_string()],
+                }),
+                downloads: {
+                    let mut map = HashMap::new();
+                    map.insert(
+                        "linux-x86_64".to_string(),
+                        DownloadInfo {
+                            url: "https://go.dev/dl/go1.21.5.linux-amd64.tar.gz".to_string(),
+                            sha256: "".to_string(),
+                        },
+                    );
+                    map.insert(
+                        "windows-x86_64".to_string(),
+                        DownloadInfo {
+                            url: "https://go.dev/dl/go1.21.5.windows-amd64.zip".to_string(),
+                            sha256: "".to_string(),
+                        },
+                    );
+                    map.insert(
+                        "darwin-x86_64".to_string(),
+                        DownloadInfo {
+                            url: "https://go.dev/dl/go1.21.5.darwin-amd64.tar.gz".to_string(),
+                            sha256: "".to_string(),
+                        },
+                    );
+                    map
+                },
             },
-        });
+        );
 
         // Rust
         languages.insert("rust".to_string(), LanguageDefinition {
