@@ -11,7 +11,7 @@ pub async fn wget(command: &Command) -> Result<()> {
     }
 
     let url = &command.args[0];
-    
+
     let filename = if let Some(idx) = command.args.iter().position(|a| a == "-O") {
         if idx + 1 < command.args.len() {
             command.args[idx + 1].clone()
@@ -26,9 +26,9 @@ pub async fn wget(command: &Command) -> Result<()> {
 
     let response = reqwest::get(url).await?;
     let total_size = response.content_length().unwrap_or(0);
-    
+
     let bytes = response.bytes().await?;
-    
+
     let mut file = File::create(&filename)?;
     file.write_all(&bytes)?;
 
@@ -44,10 +44,11 @@ pub async fn curl(command: &Command) -> Result<()> {
     }
 
     let url = &command.args[0];
-    let save_output = command.args.contains(&"-o".to_string()) || command.args.contains(&"-O".to_string());
-    
+    let save_output =
+        command.args.contains(&"-o".to_string()) || command.args.contains(&"-O".to_string());
+
     let response = reqwest::get(url).await?;
-    
+
     if save_output {
         let filename = if let Some(idx) = command.args.iter().position(|a| a == "-o") {
             if idx + 1 < command.args.len() {
@@ -58,7 +59,7 @@ pub async fn curl(command: &Command) -> Result<()> {
         } else {
             url.split('/').last().unwrap_or("output").to_string()
         };
-        
+
         let bytes = response.bytes().await?;
         let mut file = File::create(&filename)?;
         file.write_all(&bytes)?;

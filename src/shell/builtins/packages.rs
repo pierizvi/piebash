@@ -1,10 +1,10 @@
 use anyhow::Result;
 use colored::*;
-use tokio::process::Command;
 use std::process::Stdio;
+use tokio::process::Command;
 
-use crate::shell::parser::Command as ShellCommand;
 use crate::runtime::RuntimeManager;
+use crate::shell::parser::Command as ShellCommand;
 
 pub async fn pip_install(command: &ShellCommand, runtime_manager: &RuntimeManager) -> Result<()> {
     if command.args.is_empty() {
@@ -13,7 +13,7 @@ pub async fn pip_install(command: &ShellCommand, runtime_manager: &RuntimeManage
 
     // Ensure Python runtime is installed
     let python_runtime = runtime_manager.ensure_runtime("python").await?;
-    
+
     // Find pip executable
     let pip_path = python_runtime.path.join("Scripts").join("pip.exe");
     let pip_path = if pip_path.exists() {
@@ -52,7 +52,7 @@ pub async fn npm_install(command: &ShellCommand, runtime_manager: &RuntimeManage
     }
 
     let node_runtime = runtime_manager.ensure_runtime("node").await?;
-    
+
     let npm_path = if cfg!(windows) {
         node_runtime.path.join("npm.cmd")
     } else {
@@ -89,7 +89,7 @@ pub async fn cargo_install(command: &ShellCommand, runtime_manager: &RuntimeMana
     }
 
     let rust_runtime = runtime_manager.ensure_runtime("rust").await?;
-    
+
     let cargo_path = if cfg!(windows) {
         rust_runtime.path.join("bin").join("cargo.exe")
     } else {
@@ -125,7 +125,7 @@ pub async fn gem_install(command: &ShellCommand, runtime_manager: &RuntimeManage
     }
 
     let ruby_runtime = runtime_manager.ensure_runtime("ruby").await?;
-    
+
     let gem_path = if cfg!(windows) {
         ruby_runtime.path.join("bin").join("gem.exe")
     } else {

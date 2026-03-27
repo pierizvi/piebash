@@ -12,7 +12,11 @@ impl Lexer {
         self.tokenize_with_env(input, &HashMap::new())
     }
 
-    pub fn tokenize_with_env(&self, input: &str, env: &HashMap<String, String>) -> Result<Vec<String>> {
+    pub fn tokenize_with_env(
+        &self,
+        input: &str,
+        env: &HashMap<String, String>,
+    ) -> Result<Vec<String>> {
         let mut tokens = Vec::new();
         let mut current = String::new();
         let mut in_quotes = false;

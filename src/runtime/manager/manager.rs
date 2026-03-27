@@ -45,14 +45,11 @@ impl RuntimeManager {
             installed: Arc::new(RwLock::new(HashMap::new())),
         };
 
-        // Scan for already installed runtimes
         manager.scan_installed().await?;
-
         Ok(manager)
     }
 
     pub async fn ensure_runtime(&self, language: &str) -> Result<RuntimeInfo> {
-        // Check if already installed
         {
             let installed = self.installed.read().await;
             if let Some(info) = installed.get(language) {
@@ -60,7 +57,6 @@ impl RuntimeManager {
             }
         }
 
-        // Not installed - download and install
         println!("📦 {} runtime not found", language);
         self.install_runtime(language).await
     }
@@ -68,32 +64,24 @@ impl RuntimeManager {
     async fn install_runtime(&self, language: &str) -> Result<RuntimeInfo> {
         println!("📥 Downloading {}...", language);
 
-        // Get language info from registry
         let lang_def = self.registry.get_language(language)?;
 
-        // Detect platform
         let platform = crate::platform::detect_platform();
         println!("📍 Platform: {}", platform);
 
-        // Get download URL
         let download_info = lang_def.get_download_url(&platform)?;
-
-        // Download
         let archive_path = self
             .downloader
             .download(&download_info.url, &download_info.sha256)
             .await?;
-
         println!("✅ Download complete");
 
-        // Install
         let runtime_dir = self
             .base_dir
             .join("runtimes")
             .join(format!("{}-{}", language, lang_def.version));
 
         self.installer.install(&archive_path, &runtime_dir).await?;
-
         println!(
             "✅ {} {} installed to {}",
             language,
@@ -101,13 +89,9 @@ impl RuntimeManager {
             runtime_dir.display()
         );
 
-        // Find executable
         let executable = self.find_executable(&runtime_dir, &lang_def.executable)?;
+        self.verify_runtime(language, &executable)?;
 
-        // Verify
-        self.verify_runtime(&executable)?;
-
-        // Create runtime info
         let info = RuntimeInfo {
             language: language.to_string(),
             version: lang_def.version.clone(),
@@ -115,14 +99,12 @@ impl RuntimeManager {
             executable,
         };
 
-        // Register as installed
         {
             let mut installed = self.installed.write().await;
             installed.insert(language.to_string(), info.clone());
         }
 
         println!("✅ {} ready to use!", language);
-
         Ok(info)
     }
 
@@ -151,7 +133,6 @@ impl RuntimeManager {
             .and_then(|n| n.to_str())
             .context("Invalid runtime directory name")?;
 
-        // Parse: language-version
         let parts: Vec<&str> = name.splitn(2, '-').collect();
         if parts.len() != 2 {
             return Ok(None);
@@ -160,7 +141,6 @@ impl RuntimeManager {
         let language = parts[0].to_string();
         let version = parts[1].to_string();
 
-        // Find executable
         let lang_def = match self.registry.get_language(&language) {
             Ok(def) => def,
             Err(_) => return Ok(None),
@@ -180,7 +160,6 @@ impl RuntimeManager {
     }
 
     fn find_executable(&self, runtime_dir: &PathBuf, exe_name: &str) -> Result<PathBuf> {
-        // Common locations
         let candidates = vec![
             runtime_dir.join("bin").join(exe_name),
             runtime_dir.join(exe_name),
@@ -196,14 +175,13 @@ impl RuntimeManager {
             }
         }
 
-        // Fallback for archives that nest runtime files one directory deeper
         #[cfg(windows)]
         let exe_filename = format!("{}.exe", exe_name);
         #[cfg(not(windows))]
         let exe_filename = exe_name.to_string();
 
         for entry in walkdir::WalkDir::new(runtime_dir)
-            .max_depth(4)
+            .max_depth(6)
             .into_iter()
             .filter_map(|e| e.ok())
         {
@@ -220,20 +198,44 @@ impl RuntimeManager {
         anyhow::bail!("Could not find executable: {}", exe_name)
     }
 
-    fn verify_runtime(&self, executable: &PathBuf) -> Result<()> {
+    fn verify_runtime(&self, language: &str, executable: &PathBuf) -> Result<()> {
         use std::process::Command;
 
-        let output = Command::new(executable)
-            .arg("--version")
-            .output()
-            .context("Failed to verify runtime")?;
+        let output = match language {
+            "go" => Command::new(executable)
+                .arg("version")
+                .output()
+                .context("Failed to verify runtime")?,
+            "java" => {
+                let primary = Command::new(executable)
+                    .arg("--version")
+                    .output()
+                    .context("Failed to verify runtime")?;
+                if primary.status.success() {
+                    primary
+                } else {
+                    Command::new(executable)
+                        .arg("-version")
+                        .output()
+                        .context("Failed to verify runtime")?
+                }
+            }
+            _ => Command::new(executable)
+                .arg("--version")
+                .output()
+                .context("Failed to verify runtime")?,
+        };
 
         if !output.status.success() {
             anyhow::bail!("Runtime verification failed");
         }
 
-        let version = String::from_utf8_lossy(&output.stdout);
-        println!("✓ Verified: {}", version.trim());
+        let version_text = if output.stdout.is_empty() {
+            String::from_utf8_lossy(&output.stderr).to_string()
+        } else {
+            String::from_utf8_lossy(&output.stdout).to_string()
+        };
+        println!("✓ Verified: {}", version_text.trim());
 
         Ok(())
     }

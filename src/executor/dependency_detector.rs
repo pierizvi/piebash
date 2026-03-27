@@ -16,7 +16,11 @@ impl DependencyDetector {
         Self
     }
 
-    pub fn parse_error(language: &str, stderr: &str, _stdout: &str) -> Option<Vec<MissingDependency>> {
+    pub fn parse_error(
+        language: &str,
+        stderr: &str,
+        _stdout: &str,
+    ) -> Option<Vec<MissingDependency>> {
         match language {
             "python" => Self::parse_python_error(stderr),
             "node" | "nodejs" => Self::parse_node_error(stderr),
@@ -64,7 +68,11 @@ impl DependencyDetector {
             }
         }
 
-        if deps.is_empty() { None } else { Some(deps) }
+        if deps.is_empty() {
+            None
+        } else {
+            Some(deps)
+        }
     }
 
     // NODE.JS
@@ -92,7 +100,9 @@ impl DependencyDetector {
         for cap in re2.captures_iter(output) {
             if let Some(module) = cap.get(1) {
                 let module_name = module.as_str();
-                if !Self::is_node_core_module(module_name) && !deps.iter().any(|d| d.package == module_name) {
+                if !Self::is_node_core_module(module_name)
+                    && !deps.iter().any(|d| d.package == module_name)
+                {
                     deps.push(MissingDependency {
                         language: "node".to_string(),
                         package: module_name.to_string(),
@@ -103,7 +113,11 @@ impl DependencyDetector {
             }
         }
 
-        if deps.is_empty() { None } else { Some(deps) }
+        if deps.is_empty() {
+            None
+        } else {
+            Some(deps)
+        }
     }
 
     // RUBY
@@ -124,7 +138,11 @@ impl DependencyDetector {
             }
         }
 
-        if deps.is_empty() { None } else { Some(deps) }
+        if deps.is_empty() {
+            None
+        } else {
+            Some(deps)
+        }
     }
 
     // GO
@@ -161,7 +179,11 @@ impl DependencyDetector {
             }
         }
 
-        if deps.is_empty() { None } else { Some(deps) }
+        if deps.is_empty() {
+            None
+        } else {
+            Some(deps)
+        }
     }
 
     // RUST
@@ -172,7 +194,11 @@ impl DependencyDetector {
         let re1 = Regex::new(r"unresolved import `([^`]+)`").ok()?;
         for cap in re1.captures_iter(output) {
             if let Some(crate_name) = cap.get(1) {
-                let name = crate_name.as_str().split("::").next().unwrap_or(crate_name.as_str());
+                let name = crate_name
+                    .as_str()
+                    .split("::")
+                    .next()
+                    .unwrap_or(crate_name.as_str());
                 deps.push(MissingDependency {
                     language: "rust".to_string(),
                     package: name.to_string(),
@@ -182,7 +208,11 @@ impl DependencyDetector {
             }
         }
 
-        if deps.is_empty() { None } else { Some(deps) }
+        if deps.is_empty() {
+            None
+        } else {
+            Some(deps)
+        }
     }
 
     // JAVA
@@ -199,12 +229,19 @@ impl DependencyDetector {
                     language: "java".to_string(),
                     package: maven_pkg.clone(),
                     package_manager: "maven".to_string(),
-                    install_command: vec!["dependency:get".to_string(), format!("-Dartifact={}", maven_pkg)],
+                    install_command: vec![
+                        "dependency:get".to_string(),
+                        format!("-Dartifact={}", maven_pkg),
+                    ],
                 });
             }
         }
 
-        if deps.is_empty() { None } else { Some(deps) }
+        if deps.is_empty() {
+            None
+        } else {
+            Some(deps)
+        }
     }
 
     // PHP
@@ -226,7 +263,11 @@ impl DependencyDetector {
             }
         }
 
-        if deps.is_empty() { None } else { Some(deps) }
+        if deps.is_empty() {
+            None
+        } else {
+            Some(deps)
+        }
     }
 
     // PERL
@@ -247,7 +288,11 @@ impl DependencyDetector {
             }
         }
 
-        if deps.is_empty() { None } else { Some(deps) }
+        if deps.is_empty() {
+            None
+        } else {
+            Some(deps)
+        }
     }
 
     // HELPER: Python import to package mapping
@@ -272,17 +317,45 @@ impl DependencyDetector {
             }
         }
 
-        import_name.split('.').next().unwrap_or(import_name).to_string()
+        import_name
+            .split('.')
+            .next()
+            .unwrap_or(import_name)
+            .to_string()
     }
 
     // HELPER: Check if Node.js core module
     fn is_node_core_module(module: &str) -> bool {
         let core_modules = [
-            "assert", "buffer", "child_process", "cluster", "crypto",
-            "dgram", "dns", "domain", "events", "fs", "http", "https",
-            "net", "os", "path", "punycode", "querystring", "readline",
-            "repl", "stream", "string_decoder", "timers", "tls", "tty",
-            "url", "util", "v8", "vm", "zlib",
+            "assert",
+            "buffer",
+            "child_process",
+            "cluster",
+            "crypto",
+            "dgram",
+            "dns",
+            "domain",
+            "events",
+            "fs",
+            "http",
+            "https",
+            "net",
+            "os",
+            "path",
+            "punycode",
+            "querystring",
+            "readline",
+            "repl",
+            "stream",
+            "string_decoder",
+            "timers",
+            "tls",
+            "tty",
+            "url",
+            "util",
+            "v8",
+            "vm",
+            "zlib",
         ];
         core_modules.contains(&module)
     }
@@ -292,7 +365,10 @@ impl DependencyDetector {
         let mappings = [
             ("com.google.gson", "com.google.code.gson:gson:2.10"),
             ("org.json", "org.json:json:20230227"),
-            ("com.fasterxml.jackson", "com.fasterxml.jackson.core:jackson-databind:2.15.0"),
+            (
+                "com.fasterxml.jackson",
+                "com.fasterxml.jackson.core:jackson-databind:2.15.0",
+            ),
         ];
 
         for (pkg, maven) in &mappings {
@@ -301,7 +377,11 @@ impl DependencyDetector {
             }
         }
 
-        format!("{}:{}:LATEST", package, package.split('.').last().unwrap_or("artifact"))
+        format!(
+            "{}:{}:LATEST",
+            package,
+            package.split('.').last().unwrap_or("artifact")
+        )
     }
 
     // HELPER: PHP class to Composer package

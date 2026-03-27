@@ -118,6 +118,42 @@ impl Default for LanguageRegistry {
             },
         );
 
+        // Java (JDK)
+        languages.insert(
+            "java".to_string(),
+            LanguageDefinition {
+                name: "Java".to_string(),
+                version: "21.0.5".to_string(),
+                executable: "java".to_string(),
+                package_manager: None,
+                downloads: {
+                    let mut map = HashMap::new();
+                    map.insert(
+                        "linux-x86_64".to_string(),
+                        DownloadInfo {
+                            url: "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_linux_hotspot_21.0.5_11.tar.gz".to_string(),
+                            sha256: "".to_string(),
+                        },
+                    );
+                    map.insert(
+                        "windows-x86_64".to_string(),
+                        DownloadInfo {
+                            url: "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_windows_hotspot_21.0.5_11.zip".to_string(),
+                            sha256: "".to_string(),
+                        },
+                    );
+                    map.insert(
+                        "darwin-x86_64".to_string(),
+                        DownloadInfo {
+                            url: "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_mac_hotspot_21.0.5_11.tar.gz".to_string(),
+                            sha256: "".to_string(),
+                        },
+                    );
+                    map
+                },
+            },
+        );
+
         // Go
         languages.insert(
             "go".to_string(),

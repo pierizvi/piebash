@@ -52,7 +52,8 @@ impl LanguageDetector {
 
     pub fn detect_from_file(&self, file: &str) -> Result<String> {
         let path = Path::new(file);
-        let extension = path.extension()
+        let extension = path
+            .extension()
             .and_then(|e| e.to_str())
             .ok_or_else(|| anyhow::anyhow!("Could not determine file type"))?;
 

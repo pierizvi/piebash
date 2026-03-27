@@ -1,9 +1,9 @@
 pub mod command;
 pub mod lexer;
 
-pub use command::{Command, Redirect, ChainOperator};
-use anyhow::Result;
 use self::lexer::Lexer;
+use anyhow::Result;
+pub use command::{ChainOperator, Command, Redirect};
 use std::collections::HashMap;
 
 pub struct CommandParser {
@@ -41,7 +41,11 @@ impl CommandParser {
         self.parse_simple_with_env(input, env)
     }
 
-    fn try_parse_chain(&self, input: &str, env: &HashMap<String, String>) -> Result<Option<Command>> {
+    fn try_parse_chain(
+        &self,
+        input: &str,
+        env: &HashMap<String, String>,
+    ) -> Result<Option<Command>> {
         // Check for && (must check before single &)
         if input.contains("&&") {
             let parts: Vec<&str> = input.splitn(2, "&&").collect();
@@ -88,10 +92,14 @@ impl CommandParser {
         Ok(Command::new(name, args))
     }
 
-    fn parse_with_redirect_env(&self, input: &str, env: &HashMap<String, String>) -> Result<Command> {
+    fn parse_with_redirect_env(
+        &self,
+        input: &str,
+        env: &HashMap<String, String>,
+    ) -> Result<Command> {
         let append = input.contains(">>");
         let redirect_op = if append { ">>" } else { ">" };
-        
+
         let parts: Vec<&str> = input.splitn(2, redirect_op).collect();
         if parts.len() != 2 {
             anyhow::bail!("Invalid redirect syntax");
@@ -109,9 +117,13 @@ impl CommandParser {
         Ok(command)
     }
 
-    fn parse_pipeline_with_env(&self, input: &str, env: &HashMap<String, String>) -> Result<Command> {
+    fn parse_pipeline_with_env(
+        &self,
+        input: &str,
+        env: &HashMap<String, String>,
+    ) -> Result<Command> {
         let parts: Vec<&str> = input.split('|').map(|s| s.trim()).collect();
-        
+
         if parts.len() < 2 {
             anyhow::bail!("Invalid pipe syntax");
         }

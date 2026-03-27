@@ -1,10 +1,10 @@
 use anyhow::Result;
-use tokio::process::Command;
 use std::process::Stdio;
 use tokio::io::AsyncReadExt;
+use tokio::process::Command;
 
-use crate::shell::parser::Command as ShellCommand;
 use crate::shell::environment::Environment;
+use crate::shell::parser::Command as ShellCommand;
 
 pub struct CommandExecutor;
 
@@ -51,7 +51,7 @@ impl CommandExecutor {
 
     async fn execute_with_redirect(&self, command: &ShellCommand, env: &Environment) -> Result<()> {
         let redirect = command.redirect_stdout.as_ref().unwrap();
-        
+
         // Open output file
         let file = if redirect.append {
             std::fs::OpenOptions::new()
@@ -91,11 +91,12 @@ impl CommandExecutor {
     async fn execute_pipeline(&self, command: &ShellCommand, env: &Environment) -> Result<()> {
         // Simplified: use shell to execute pipe for now
         // This is a temporary workaround - we'll improve it later
-        
+
         if let Some(next_cmd) = &command.pipe_to {
             // Build the full pipeline command
-            let full_command = format!("{} {} | {} {}", 
-                command.name, 
+            let full_command = format!(
+                "{} {} | {} {}",
+                command.name,
                 command.args.join(" "),
                 next_cmd.name,
                 next_cmd.args.join(" ")
@@ -106,7 +107,7 @@ impl CommandExecutor {
             let shell_cmd = "cmd";
             #[cfg(windows)]
             let shell_arg = "/C";
-            
+
             #[cfg(not(windows))]
             let shell_cmd = "sh";
             #[cfg(not(windows))]

@@ -1,22 +1,21 @@
-pub mod parser;
 pub mod builtins;
 pub mod environment;
 pub mod executor;
+pub mod parser;
 
 use anyhow::Result;
-use std::path::PathBuf;
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::path::PathBuf;
 
-
-use self::parser::CommandParser;
 use self::builtins::Builtins;
 use self::environment::Environment;
 use self::executor::CommandExecutor;
+use self::parser::CommandParser;
 
-use crate::runtime::RuntimeManager;
 use crate::executor::CodeExecutor;
 use crate::language::LanguageDetector;
+use crate::runtime::RuntimeManager;
 
 pub struct Shell {
     parser: CommandParser,
@@ -61,7 +60,7 @@ impl Shell {
         loop {
             // Execute the current command
             last_result = self.execute_single_command(current_command).await;
-            
+
             // Check if there's a chained command
             if let Some(ref next_cmd) = current_command.next_command {
                 match current_command.chain_operator {
@@ -84,7 +83,7 @@ impl Shell {
                         break;
                     }
                 }
-                
+
                 // Move to next command
                 current_command = next_cmd;
             } else {
@@ -92,28 +91,36 @@ impl Shell {
                 break;
             }
         }
-        
+
         last_result
     }
 
     async fn execute_single_command(&mut self, command: &parser::Command) -> Result<()> {
+        let cmd_lower = command.name.to_lowercase();
+
         // Handle pipes specially
-        if command.name == "piebash" {
-            anyhow::bail!("Cannot run piebash inside piebash. Use 'exit' to return to the parent shell.");
+        if cmd_lower == "piebash" {
+            anyhow::bail!(
+                "Cannot run piebash inside piebash. Use 'exit' to return to the parent shell."
+            );
         }
 
         // Handle pipes specially
         if command.pipe_to.is_some() {
-            return self.execute_pipeline(&command).await
+            return self.execute_pipeline(&command).await;
         }
         // Check if it's a built-in
-        if self.builtins.is_builtin(&command.name) {
-            return self.execute_builtin(&command).await;
+        if self.builtins.is_builtin(&cmd_lower) {
+            let mut normalized = command.clone();
+            normalized.name = cmd_lower;
+            return self.execute_builtin(&normalized).await;
         }
 
         // Check if it's code execution
-        if self.is_code_execution(&command.name) {
-            return self.execute_code(&command).await;
+        if self.is_code_execution(command) {
+            let mut normalized = command.clone();
+            normalized.name = cmd_lower;
+            return self.execute_code(&normalized).await;
         }
 
         // Execute as external command
@@ -127,7 +134,7 @@ impl Shell {
                 if self.builtins.is_builtin(&next_cmd.name) {
                     // Both are built-ins - handle internally
                     let output = self.capture_builtin_output(&command)?;
-                    
+
                     // Filter the output through the second command
                     self.execute_builtin_with_input(next_cmd, &output).await?;
                     return Ok(());
@@ -140,40 +147,39 @@ impl Shell {
     }
 
     async fn execute_builtin(&mut self, command: &parser::Command) -> Result<()> {
-    if let Some(redirect) = &command.redirect_stdout {
-        let output = match command.name.as_str() {
-            "echo" => command.args.join(" ") + "\n",
-            _ => self.capture_builtin_output(command)?,
-        };
-        let mut file = if redirect.append {
-            OpenOptions::new().create(true).append(true).open(&redirect.target)?
-        } else {
-            OpenOptions::new().create(true).write(true).truncate(true).open(&redirect.target)?
-        };
-        write!(file, "{}", output)?;
-        return Ok(());
-    }
+        if let Some(redirect) = &command.redirect_stdout {
+            let output = match command.name.as_str() {
+                "echo" => command.args.join(" ") + "\n",
+                _ => self.capture_builtin_output(command)?,
+            };
+            let mut file = if redirect.append {
+                OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&redirect.target)?
+            } else {
+                OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(&redirect.target)?
+            };
+            write!(file, "{}", output)?;
+            return Ok(());
+        }
 
-    // Pass runtime_manager to async execute
-    self.builtins
-        .execute_async(command, &mut self.environment, Some(&self.runtime_manager))
-        .await
-}
+        // Pass runtime_manager to async execute
+        self.builtins
+            .execute_async(command, &mut self.environment, Some(&self.runtime_manager))
+            .await
+    }
 
     fn capture_builtin_output(&mut self, command: &parser::Command) -> Result<String> {
         match command.name.as_str() {
-            "echo" => {
-                Ok(command.args.join(" ") + "\n")
-            }
-            "pwd" => {
-                Ok(format!("{}\n", self.environment.get_cwd().display()))
-            }
-            "ls" => {
-                self.capture_ls_output(command)
-            }
-            "cat" => {
-                self.capture_cat_output(command)
-            }
+            "echo" => Ok(command.args.join(" ") + "\n"),
+            "pwd" => Ok(format!("{}\n", self.environment.get_cwd().display())),
+            "ls" => self.capture_ls_output(command),
+            "cat" => self.capture_cat_output(command),
             "env" => {
                 let mut output = String::new();
                 let mut vars: Vec<_> = self.environment.get_all_vars().iter().collect();
@@ -192,7 +198,7 @@ impl Shell {
 
     fn capture_ls_output(&self, command: &parser::Command) -> Result<String> {
         use std::fs;
-        
+
         let mut show_all = false;
         let mut target_path = None;
 
@@ -213,12 +219,15 @@ impl Shell {
         };
 
         if !path.exists() {
-            anyhow::bail!("ls: cannot access '{}': No such file or directory", path.display());
+            anyhow::bail!(
+                "ls: cannot access '{}': No such file or directory",
+                path.display()
+            );
         }
 
         let mut output = String::new();
         let mut entries = Vec::new();
-        
+
         for entry in fs::read_dir(&path)? {
             let entry = entry?;
             entries.push(entry);
@@ -241,16 +250,16 @@ impl Shell {
                 output.push_str(&format!("{}\n", name));
             }
         }
-        
+
         Ok(output)
     }
 
     fn capture_cat_output(&self, command: &parser::Command) -> Result<String> {
         use std::fs;
         use std::path::Path;
-        
+
         let mut output = String::new();
-        
+
         for file in &command.args {
             let path = Path::new(file.as_str());
             if !path.exists() {
@@ -258,19 +267,23 @@ impl Shell {
             }
             output.push_str(&fs::read_to_string(path)?);
         }
-        
+
         Ok(output)
     }
 
-    async fn execute_builtin_with_input(&mut self, command: &parser::Command, input: &str) -> Result<()> {
+    async fn execute_builtin_with_input(
+        &mut self,
+        command: &parser::Command,
+        input: &str,
+    ) -> Result<()> {
         match command.name.as_str() {
             "grep" => {
                 if command.args.is_empty() {
                     anyhow::bail!("grep: missing pattern");
                 }
-                
+
                 let pattern = &command.args[0];
-                
+
                 for line in input.lines() {
                     if line.contains(pattern) {
                         println!("{}", line);
@@ -278,49 +291,68 @@ impl Shell {
                 }
                 Ok(())
             }
-            _ => {
-                self.builtins.execute(&command, &mut self.environment)
-            }
+            _ => self.builtins.execute(&command, &mut self.environment),
         }
     }
 
-    fn is_code_execution(&self, cmd: &str) -> bool {
+    fn is_code_execution(&self, command: &parser::Command) -> bool {
+        if command.name.starts_with('@') {
+            return true;
+        }
+
+        let cmd = command.name.to_lowercase();
         let runtimes = [
-            "python", "python3", "python2",
-            "node", "nodejs",
-            "java", "javac",
-            "ruby", "rb",
-            "rust", "rustc", "cargo",
-            "go",
-            "php", "perl", "lua",
+            "python", "python3", "python2", "node", "nodejs", "java", "javac", "ruby", "rb",
+            "rust", "rustc", "cargo", "go", "php", "perl", "lua",
         ];
 
-        runtimes.contains(&cmd) || cmd.starts_with('@')
+        if !runtimes.contains(&cmd.as_str()) {
+            return false;
+        }
+
+        command
+            .args
+            .iter()
+            .any(|arg| self.language_detector.detect_from_file(arg).is_ok())
     }
 
     async fn execute_code(&mut self, command: &parser::Command) -> Result<()> {
         let language = if command.name.starts_with('@') {
             command.name[1..].to_string()
-        } else if !command.args.is_empty() {
-            self.language_detector.detect_from_file(&command.args[0])?
         } else {
-            anyhow::bail!("No code to execute");
+            command
+                .args
+                .iter()
+                .find_map(|arg| self.language_detector.detect_from_file(arg).ok())
+                .ok_or_else(|| anyhow::anyhow!("Could not determine file type"))?
         };
 
-        self.code_executor.execute(&language, command).await
+        let mut normalized = command.clone();
+        if language == "go"
+            && !normalized.args.is_empty()
+            && normalized.args[0].eq_ignore_ascii_case("run")
+        {
+            normalized.args.remove(0);
+        }
+
+        self.code_executor.execute(&language, &normalized).await
     }
 
     pub fn get_prompt(&self) -> String {
         use colored::*;
-        
+
         let cwd = self.environment.get_cwd();
         let home = self.environment.get_home_dir();
 
-        let username = self.environment.get_var("USERNAME")
+        let username = self
+            .environment
+            .get_var("USERNAME")
             .or_else(|| self.environment.get_var("USER"))
             .unwrap_or_else(|| "user".to_string());
 
-        let hostname = self.environment.get_var("COMPUTERNAME")
+        let hostname = self
+            .environment
+            .get_var("COMPUTERNAME")
             .or_else(|| self.environment.get_var("HOSTNAME"))
             .unwrap_or_else(|| "DESKTOP".to_string());
 

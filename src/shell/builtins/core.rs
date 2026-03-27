@@ -1,9 +1,8 @@
 use anyhow::Result;
 use colored::*;
 
-
-use crate::shell::parser::Command;
 use crate::shell::environment::Environment;
+use crate::shell::parser::Command;
 
 pub fn cd(command: &Command, env: &mut Environment) -> Result<()> {
     let target = if command.args.is_empty() {
@@ -47,10 +46,18 @@ pub fn pwd(env: &Environment) -> Result<()> {
 
 pub fn echo(command: &Command) -> Result<()> {
     let no_newline = command.args.contains(&"-n".to_string());
-    let args: Vec<&String> = command.args.iter().filter(|a| *a != "-n" && *a != "-e").collect();
-    
-    let output = args.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(" ");
-    
+    let args: Vec<&String> = command
+        .args
+        .iter()
+        .filter(|a| *a != "-n" && *a != "-e")
+        .collect();
+
+    let output = args
+        .iter()
+        .map(|s| s.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
+
     if no_newline {
         print!("{}", output);
     } else {
@@ -123,7 +130,10 @@ pub fn alias_cmd(command: &Command, env: &mut Environment) -> Result<()> {
         for arg in &command.args {
             if let Some(pos) = arg.find('=') {
                 let name = arg[..pos].to_string();
-                let value = arg[pos + 1..].trim_matches('\'').trim_matches('"').to_string();
+                let value = arg[pos + 1..]
+                    .trim_matches('\'')
+                    .trim_matches('"')
+                    .to_string();
                 env.set_alias(name, value);
             } else {
                 // Show specific alias
@@ -158,13 +168,10 @@ pub fn history_cmd(env: &Environment) -> Result<()> {
 
 pub fn type_cmd(command: &Command) -> Result<()> {
     let builtins = vec![
-        "cd", "pwd", "echo", "export", "env", "set", "unset",
-        "alias", "unalias", "help", "clear", "exit", "history",
-        "ls", "cat", "touch", "mkdir", "rm", "cp", "mv", "ln",
-        "chmod", "chown", "stat", "file",
-        "grep", "find", "wc", "head", "tail", "sort", "uniq", "which",
-        "wget", "curl",
-        "true", "false", "yes", "kill", "sleep",
+        "cd", "pwd", "echo", "export", "env", "set", "unset", "alias", "unalias", "help", "clear",
+        "exit", "history", "ls", "cat", "touch", "mkdir", "rm", "cp", "mv", "ln", "chmod", "chown",
+        "stat", "file", "grep", "find", "wc", "head", "tail", "sort", "uniq", "which", "wget",
+        "curl", "true", "false", "yes", "kill", "sleep",
     ];
 
     for cmd in &command.args {
@@ -204,7 +211,8 @@ pub fn sleep_cmd(command: &Command) -> Result<()> {
         anyhow::bail!("sleep: missing operand");
     }
 
-    let seconds: f64 = command.args[0].parse()
+    let seconds: f64 = command.args[0]
+        .parse()
         .map_err(|_| anyhow::anyhow!("sleep: invalid time interval '{}'", command.args[0]))?;
 
     std::thread::sleep(std::time::Duration::from_secs_f64(seconds));
@@ -217,8 +225,11 @@ pub fn kill_cmd(command: &Command) -> Result<()> {
     }
 
     for arg in &command.args {
-        if arg.starts_with('-') { continue; }
-        let pid: u32 = arg.parse()
+        if arg.starts_with('-') {
+            continue;
+        }
+        let pid: u32 = arg
+            .parse()
             .map_err(|_| anyhow::anyhow!("kill: invalid pid: {}", arg))?;
 
         #[cfg(unix)]

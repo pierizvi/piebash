@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::path::PathBuf;
 
-#[derive(Clone)]  // FIXED: Added Clone
+#[derive(Clone)] // FIXED: Added Clone
 pub struct RuntimeInstaller {
     base_dir: PathBuf,
 }
@@ -16,7 +16,8 @@ impl RuntimeInstaller {
 
         std::fs::create_dir_all(dest)?;
 
-        let extension = archive.extension()
+        let extension = archive
+            .extension()
             .and_then(|e| e.to_str())
             .ok_or_else(|| anyhow::anyhow!("Unknown archive type"))?;
 
@@ -33,8 +34,8 @@ impl RuntimeInstaller {
     }
 
     fn extract_zip(&self, archive: &PathBuf, dest: &PathBuf) -> Result<()> {
-        use zip::ZipArchive;
         use std::fs::File;
+        use zip::ZipArchive;
 
         let file = File::open(archive)?;
         let mut zip = ZipArchive::new(file)?;
@@ -68,8 +69,8 @@ impl RuntimeInstaller {
 
     fn extract_tar_gz(&self, archive: &PathBuf, dest: &PathBuf) -> Result<()> {
         use flate2::read::GzDecoder;
-        use tar::Archive;
         use std::fs::File;
+        use tar::Archive;
 
         let file = File::open(archive)?;
         let gz = GzDecoder::new(file);
@@ -81,9 +82,9 @@ impl RuntimeInstaller {
     }
 
     fn extract_tar_xz(&self, archive: &PathBuf, dest: &PathBuf) -> Result<()> {
-        use xz2::read::XzDecoder;
-        use tar::Archive;
         use std::fs::File;
+        use tar::Archive;
+        use xz2::read::XzDecoder;
 
         let file = File::open(archive)?;
         let xz = XzDecoder::new(file);

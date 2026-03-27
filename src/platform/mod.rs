@@ -1,5 +1,5 @@
-pub mod paths;
 pub mod adapter;
+pub mod paths;
 
 #[cfg(unix)]
 pub mod unix;

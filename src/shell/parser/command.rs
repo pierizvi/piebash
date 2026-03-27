@@ -5,8 +5,8 @@ pub struct Command {
     pub redirect_stdout: Option<Redirect>,
     pub redirect_stderr: Option<Redirect>,
     pub pipe_to: Option<Box<Command>>,
-    pub chain_operator: Option<ChainOperator>,  // NEW
-    pub next_command: Option<Box<Command>>,     // NEW
+    pub chain_operator: Option<ChainOperator>, // NEW
+    pub next_command: Option<Box<Command>>,    // NEW
 }
 
 #[derive(Debug, Clone)]
@@ -17,9 +17,9 @@ pub struct Redirect {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ChainOperator {
-    And,      // &&
-    Or,       // ||
-    Semicolon // ;
+    And,       // &&
+    Or,        // ||
+    Semicolon, // ;
 }
 
 impl Command {

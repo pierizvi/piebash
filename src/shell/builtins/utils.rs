@@ -35,7 +35,7 @@ pub fn find(command: &Command) -> Result<()> {
 
     for entry in walker.into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
-        
+
         if let Some(pat) = pattern {
             if let Some(name) = path.file_name() {
                 let name_str = name.to_string_lossy();
@@ -59,7 +59,7 @@ pub fn wc(command: &Command) -> Result<()> {
     let count_lines = command.args.contains(&"-l".to_string());
     let count_words = command.args.contains(&"-w".to_string());
     let count_chars = command.args.contains(&"-c".to_string());
-    
+
     let show_all = !count_lines && !count_words && !count_chars;
 
     for file in &command.args {
@@ -82,9 +82,15 @@ pub fn wc(command: &Command) -> Result<()> {
             println!("{:>8} {:>8} {:>8} {}", lines, words, chars, file);
         } else {
             let mut parts = Vec::new();
-            if count_lines { parts.push(format!("{:>8}", lines)); }
-            if count_words { parts.push(format!("{:>8}", words)); }
-            if count_chars { parts.push(format!("{:>8}", chars)); }
+            if count_lines {
+                parts.push(format!("{:>8}", lines));
+            }
+            if count_words {
+                parts.push(format!("{:>8}", words));
+            }
+            if count_chars {
+                parts.push(format!("{:>8}", chars));
+            }
             parts.push(file.clone());
             println!("{}", parts.join(" "));
         }
@@ -169,7 +175,7 @@ pub fn sort_cmd(command: &Command) -> Result<()> {
 
         let contents = fs::read_to_string(path)?;
         let mut lines: Vec<&str> = contents.lines().collect();
-        
+
         if reverse {
             lines.sort_by(|a, b| b.cmp(a));
         } else {
@@ -204,7 +210,7 @@ pub fn uniq_cmd(command: &Command) -> Result<()> {
 
         let contents = fs::read_to_string(path)?;
         let lines: Vec<&str> = contents.lines().collect();
-        
+
         let mut prev = "";
         let mut line_count = 0;
 

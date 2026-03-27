@@ -1,14 +1,14 @@
 use anyhow::Result;
 use colored::*;
 use rustyline::error::ReadlineError;
-use rustyline::{DefaultEditor, Config, CompletionType, EditMode};
+use rustyline::{CompletionType, Config, DefaultEditor, EditMode};
 
-mod shell;
-mod runtime;
 mod executor;
-mod terminal;
-mod platform;
 mod language;
+mod platform;
+mod runtime;
+mod shell;
+mod terminal;
 mod utils;
 
 use shell::Shell;
@@ -37,7 +37,7 @@ async fn main() -> Result<()> {
     let history_file = shell.get_history_file();
     let _ = rl.load_history(&history_file);
 
-        // Read line
+    // Read line
     // Main REPL loop
     loop {
         // Get prompt (plain text, no ANSI codes)
@@ -91,14 +91,40 @@ async fn main() -> Result<()> {
 }
 
 fn print_banner() {
-    println!("{}", "╔═══════════════════════════════════════════════╗".cyan());
-    println!("{}", "║                                               ║".cyan());
-    println!("{}", "║               piebash v0.1.0                  ║".cyan().bold());
-    println!("{}", "║                                               ║".cyan());
-    println!("{}", "║    universal linux based terminal             ║".cyan());
-    println!("{}", "║    with code execution runtime                ║".cyan());
-    println!("{}", "║                                               ║".cyan());
-    println!("{}", "╚═══════════════════════════════════════════════╝".cyan());
+    println!(
+        "{}",
+        "╔═══════════════════════════════════════════════╗".cyan()
+    );
+    println!(
+        "{}",
+        "║                                               ║".cyan()
+    );
+    println!(
+        "{}",
+        "║               piebash v0.1.0                  ║"
+            .cyan()
+            .bold()
+    );
+    println!(
+        "{}",
+        "║                                               ║".cyan()
+    );
+    println!(
+        "{}",
+        "║    universal linux based terminal             ║".cyan()
+    );
+    println!(
+        "{}",
+        "║    with code execution runtime                ║".cyan()
+    );
+    println!(
+        "{}",
+        "║                                               ║".cyan()
+    );
+    println!(
+        "{}",
+        "╚═══════════════════════════════════════════════╝".cyan()
+    );
     println!();
     println!("{}", "Type 'help' for available commands".dimmed());
     println!();

@@ -25,7 +25,10 @@ impl Environment {
         std::fs::create_dir_all(&piebash_home)?;
 
         vars.insert("SHELL".to_string(), "piebash".to_string());
-        vars.insert("PIEBASH_HOME".to_string(), piebash_home.to_string_lossy().to_string());
+        vars.insert(
+            "PIEBASH_HOME".to_string(),
+            piebash_home.to_string_lossy().to_string(),
+        );
 
         let cwd = env::current_dir()?;
 

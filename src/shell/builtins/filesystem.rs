@@ -3,8 +3,8 @@ use colored::*;
 use std::fs;
 use std::path::Path;
 
-use crate::shell::parser::Command;
 use crate::shell::environment::Environment;
+use crate::shell::parser::Command;
 
 pub fn ls(command: &Command, env: &Environment) -> Result<()> {
     // Parse flags and path separately
@@ -38,7 +38,10 @@ pub fn ls(command: &Command, env: &Environment) -> Result<()> {
     };
 
     if !path.exists() {
-        anyhow::bail!("ls: cannot access '{}': No such file or directory", path.display());
+        anyhow::bail!(
+            "ls: cannot access '{}': No such file or directory",
+            path.display()
+        );
     }
 
     if path.is_file() {
@@ -76,7 +79,8 @@ pub fn ls(command: &Command, env: &Environment) -> Result<()> {
                 size.to_string()
             };
 
-            let modified = metadata.modified()
+            let modified = metadata
+                .modified()
                 .ok()
                 .and_then(|t| {
                     let dt: chrono::DateTime<chrono::Local> = t.into();
@@ -94,12 +98,7 @@ pub fn ls(command: &Command, env: &Environment) -> Result<()> {
 
             println!(
                 "{}{} {:>3} {:>8} {} {}",
-                file_type,
-                permissions,
-                1,
-                size_str,
-                modified,
-                display_name
+                file_type, permissions, 1, size_str, modified, display_name
             );
         }
     } else {
@@ -149,7 +148,9 @@ pub fn cat(command: &Command) -> Result<()> {
     let show_line_numbers = command.args.contains(&"-n".to_string());
 
     for file in &command.args {
-        if file.starts_with('-') { continue; }
+        if file.starts_with('-') {
+            continue;
+        }
 
         let path = Path::new(file.as_str());
         if !path.exists() {
@@ -177,7 +178,9 @@ pub fn touch(command: &Command) -> Result<()> {
     }
 
     for file in &command.args {
-        if file.starts_with('-') { continue; }
+        if file.starts_with('-') {
+            continue;
+        }
         let path = Path::new(file.as_str());
         if path.exists() {
             let _ = fs::OpenOptions::new().write(true).open(path)?;
@@ -197,7 +200,9 @@ pub fn mkdir(command: &Command) -> Result<()> {
     let recursive = command.args.contains(&"-p".to_string());
 
     for dir in &command.args {
-        if dir.starts_with('-') { continue; }
+        if dir.starts_with('-') {
+            continue;
+        }
         let path = Path::new(dir.as_str());
         if recursive {
             fs::create_dir_all(path)?;
@@ -222,13 +227,19 @@ pub fn rm(command: &Command) -> Result<()> {
 
     for arg in &command.args {
         if arg.starts_with('-') {
-            if arg.contains('r') || arg.contains('R') { recursive = true; }
-            if arg.contains('f') { force = true; }
+            if arg.contains('r') || arg.contains('R') {
+                recursive = true;
+            }
+            if arg.contains('f') {
+                force = true;
+            }
         }
     }
 
     for item in &command.args {
-        if item.starts_with('-') { continue; }
+        if item.starts_with('-') {
+            continue;
+        }
 
         let path = Path::new(item.as_str());
 
@@ -259,7 +270,9 @@ pub fn cp(command: &Command) -> Result<()> {
 
     for arg in &command.args {
         if arg.starts_with('-') {
-            if arg.contains('r') || arg.contains('R') { recursive = true; }
+            if arg.contains('r') || arg.contains('R') {
+                recursive = true;
+            }
         } else {
             args.push(arg);
         }
@@ -273,12 +286,18 @@ pub fn cp(command: &Command) -> Result<()> {
     let dest = Path::new(args[1].as_str());
 
     if !source.exists() {
-        anyhow::bail!("cp: cannot stat '{}': No such file or directory", source.display());
+        anyhow::bail!(
+            "cp: cannot stat '{}': No such file or directory",
+            source.display()
+        );
     }
 
     if source.is_dir() {
         if !recursive {
-            anyhow::bail!("cp: -r not specified; omitting directory '{}'", source.display());
+            anyhow::bail!(
+                "cp: -r not specified; omitting directory '{}'",
+                source.display()
+            );
         }
         copy_dir_all(source, dest)?;
     } else {
@@ -308,7 +327,11 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
 }
 
 pub fn mv(command: &Command) -> Result<()> {
-    let args: Vec<&String> = command.args.iter().filter(|a| !a.starts_with('-')).collect();
+    let args: Vec<&String> = command
+        .args
+        .iter()
+        .filter(|a| !a.starts_with('-'))
+        .collect();
 
     if args.len() < 2 {
         anyhow::bail!("mv: missing file operand");
@@ -318,7 +341,10 @@ pub fn mv(command: &Command) -> Result<()> {
     let dest = Path::new(args[1].as_str());
 
     if !source.exists() {
-        anyhow::bail!("mv: cannot stat '{}': No such file or directory", source.display());
+        anyhow::bail!(
+            "mv: cannot stat '{}': No such file or directory",
+            source.display()
+        );
     }
 
     if dest.is_dir() {
@@ -333,7 +359,11 @@ pub fn mv(command: &Command) -> Result<()> {
 
 pub fn ln(command: &Command) -> Result<()> {
     let symbolic = command.args.contains(&"-s".to_string());
-    let args: Vec<&String> = command.args.iter().filter(|a| !a.starts_with('-')).collect();
+    let args: Vec<&String> = command
+        .args
+        .iter()
+        .filter(|a| !a.starts_with('-'))
+        .collect();
 
     if args.len() < 2 {
         anyhow::bail!("ln: missing file operand");
@@ -368,7 +398,11 @@ pub fn chmod(command: &Command) -> Result<()> {
     {
         use std::os::unix::fs::PermissionsExt;
 
-        let args: Vec<&String> = command.args.iter().filter(|a| !a.starts_with('-')).collect();
+        let args: Vec<&String> = command
+            .args
+            .iter()
+            .filter(|a| !a.starts_with('-'))
+            .collect();
 
         if args.len() < 2 {
             anyhow::bail!("chmod: missing operand");
@@ -415,7 +449,9 @@ pub fn stat(command: &Command) -> Result<()> {
     }
 
     for file in &command.args {
-        if file.starts_with('-') { continue; }
+        if file.starts_with('-') {
+            continue;
+        }
 
         let path = Path::new(file.as_str());
         if !path.exists() {
@@ -426,7 +462,14 @@ pub fn stat(command: &Command) -> Result<()> {
         let metadata = fs::metadata(path)?;
         println!("  File: {}", file);
         println!("  Size: {}", metadata.len());
-        println!("  Type: {}", if metadata.is_dir() { "directory" } else { "regular file" });
+        println!(
+            "  Type: {}",
+            if metadata.is_dir() {
+                "directory"
+            } else {
+                "regular file"
+            }
+        );
 
         if let Ok(modified) = metadata.modified() {
             let dt: chrono::DateTime<chrono::Local> = modified.into();
