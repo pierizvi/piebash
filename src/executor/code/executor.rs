@@ -1,13 +1,21 @@
 use anyhow::Result;
 use colored::*;
+use sha2::{Digest, Sha256};
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tokio::process::Command;
 
 use crate::executor::dependency_detector::{DependencyDetector, MissingDependency};
 use crate::runtime::RuntimeManager;
 use crate::shell::parser::Command as ShellCommand;
+
+#[derive(Debug, Clone)]
+struct FileExecutionContext {
+    file: PathBuf,
+    working_dir: Option<PathBuf>,
+}
 
 #[derive(Clone)]
 pub struct CodeExecutor {
@@ -42,6 +50,12 @@ impl CodeExecutor {
         loop {
             attempt += 1;
 
+            let file_context = if !command.name.starts_with('@') && !command.args.is_empty() {
+                Some(self.prepare_file_execution(language, &env_path, &command.args[0])?)
+            } else {
+                None
+            };
+
             if attempt > 1 {
                 println!("\n{} Retry attempt {}...", "[RETRY]".yellow(), attempt);
             }
@@ -50,10 +64,9 @@ impl CodeExecutor {
                 let code = command.args.join(" ");
                 self.execute_inline(&runtime.executable, &env_path, language, &code)
                     .await
-            } else if !command.args.is_empty() {
-                let file = &command.args[0];
+            } else if let Some(file_context) = file_context.as_ref() {
                 let args = &command.args[1..];
-                self.execute_file(&runtime.executable, &env_path, language, file, args)
+                self.execute_file(&runtime.executable, &env_path, language, file_context, args)
                     .await
             } else {
                 anyhow::bail!("No code to execute");
@@ -110,7 +123,14 @@ impl CodeExecutor {
                             any_new = true;
 
                             match self
-                                .auto_install_dependency(dep, &env_path, &runtime.executable)
+                                .auto_install_dependency(
+                                    dep,
+                                    &env_path,
+                                    &runtime.executable,
+                                    file_context
+                                        .as_ref()
+                                        .and_then(|context| context.working_dir.as_ref()),
+                                )
                                 .await
                             {
                                 Ok(_) => {
@@ -188,6 +208,63 @@ impl CodeExecutor {
         Ok(env_path)
     }
 
+    fn prepare_file_execution(
+        &self,
+        language: &str,
+        env_path: &PathBuf,
+        file: &str,
+    ) -> Result<FileExecutionContext> {
+        let file_path = Path::new(file);
+        if !file_path.exists() {
+            anyhow::bail!("File not found: {}", file);
+        }
+
+        match language {
+            "go" => self.prepare_go_file_context(env_path, file_path),
+            _ => Ok(FileExecutionContext {
+                file: file_path.to_path_buf(),
+                working_dir: None,
+            }),
+        }
+    }
+
+    fn prepare_go_file_context(
+        &self,
+        env_path: &PathBuf,
+        file_path: &Path,
+    ) -> Result<FileExecutionContext> {
+        let source = fs::read_to_string(file_path)?;
+        let canonical = file_path
+            .canonicalize()
+            .unwrap_or_else(|_| file_path.to_path_buf());
+
+        let mut digest = Sha256::new();
+        digest.update(canonical.to_string_lossy().as_bytes());
+        let digest = digest.finalize();
+        let workspace_id = digest[..8]
+            .iter()
+            .map(|byte| format!("{:02x}", byte))
+            .collect::<String>();
+
+        let workspace = env_path.join("go-workspaces").join(workspace_id);
+        fs::create_dir_all(&workspace)?;
+        fs::create_dir_all(env_path.join("pkg").join("mod"))?;
+        fs::create_dir_all(env_path.join("go-build"))?;
+
+        let go_file = workspace.join("main.go");
+        fs::write(&go_file, source)?;
+
+        let go_mod = workspace.join("go.mod");
+        if !go_mod.exists() {
+            fs::write(&go_mod, "module piebashrun\n\ngo 1.21.5\n")?;
+        }
+
+        Ok(FileExecutionContext {
+            file: go_file,
+            working_dir: Some(workspace),
+        })
+    }
+
     async fn execute_inline(
         &self,
         executable: &PathBuf,
@@ -235,22 +312,33 @@ impl CodeExecutor {
         executable: &PathBuf,
         env_path: &PathBuf,
         language: &str,
-        file: &str,
+        file_context: &FileExecutionContext,
         args: &[String],
     ) -> Result<()> {
-        println!("{} Executing {}...\n", "[RUN]".cyan(), file);
-
-        let file_path = std::path::Path::new(file);
-        if !file_path.exists() {
-            anyhow::bail!("File not found: {}", file);
-        }
+        println!(
+            "{} Executing {}...\n",
+            "[RUN]".cyan(),
+            file_context.file.display()
+        );
 
         let mut cmd = Command::new(executable);
-        if language == "go" {
-            cmd.arg("run");
+        match language {
+            "go" => {
+                cmd.arg("run");
+            }
+            "java" => {
+                if let Some(classpath) = self.java_classpath(env_path) {
+                    cmd.arg("-cp");
+                    cmd.arg(classpath);
+                }
+            }
+            _ => {}
         }
-        cmd.arg(file_path);
+        cmd.arg(&file_context.file);
         cmd.args(args);
+        if let Some(working_dir) = &file_context.working_dir {
+            cmd.current_dir(working_dir);
+        }
 
         self.set_runtime_env(&mut cmd, env_path, language);
 
@@ -322,6 +410,8 @@ impl CodeExecutor {
             }
             "go" => {
                 cmd.env("GOPATH", env_path);
+                cmd.env("GOMODCACHE", env_path.join("pkg").join("mod"));
+                cmd.env("GOCACHE", env_path.join("go-build"));
             }
             _ => {}
         }
@@ -332,6 +422,7 @@ impl CodeExecutor {
         dep: &MissingDependency,
         env_path: &PathBuf,
         runtime_executable: &PathBuf,
+        execution_dir: Option<&PathBuf>,
     ) -> Result<()> {
         println!(
             "\n{} Missing dependency: {}",
@@ -352,9 +443,10 @@ impl CodeExecutor {
             }
             "ruby" => self.install_ruby_package(dep, env_path).await,
             "go" => {
-                self.install_go_package(dep, env_path, runtime_executable)
+                self.install_go_package(dep, env_path, runtime_executable, execution_dir)
                     .await
             }
+            "java" => self.install_java_package(dep, env_path).await,
             _ => anyhow::bail!("Package installation not supported for {}", dep.language),
         }
     }
@@ -543,10 +635,13 @@ impl CodeExecutor {
         dep: &MissingDependency,
         env_path: &PathBuf,
         runtime_executable: &PathBuf,
+        execution_dir: Option<&PathBuf>,
     ) -> Result<()> {
         let go_path = self
             .find_runtime_binary(runtime_executable, env_path, "go")
             .ok_or_else(|| anyhow::anyhow!("go not found"))?;
+        let execution_dir = execution_dir
+            .ok_or_else(|| anyhow::anyhow!("Go dependency installation requires a workspace"))?;
 
         if !go_path.exists() {
             anyhow::bail!("go not found");
@@ -555,7 +650,10 @@ impl CodeExecutor {
         let mut cmd = Command::new(&go_path);
         cmd.arg("get");
         cmd.arg(&dep.package);
+        cmd.current_dir(execution_dir);
         cmd.env("GOPATH", env_path);
+        cmd.env("GOMODCACHE", env_path.join("pkg").join("mod"));
+        cmd.env("GOCACHE", env_path.join("go-build"));
         cmd.stdin(Stdio::null());
         cmd.stdout(Stdio::inherit());
         cmd.stderr(Stdio::inherit());
@@ -572,6 +670,90 @@ impl CodeExecutor {
             dep.package.green()
         );
         Ok(())
+    }
+
+    async fn install_java_package(
+        &self,
+        dep: &MissingDependency,
+        env_path: &PathBuf,
+    ) -> Result<()> {
+        let coordinates: Vec<&str> = dep.package.split(':').collect();
+        if coordinates.len() != 3 {
+            anyhow::bail!("Unsupported Maven coordinate: {}", dep.package);
+        }
+
+        let group = coordinates[0];
+        let artifact = coordinates[1];
+        let version = coordinates[2];
+
+        if version.eq_ignore_ascii_case("LATEST") {
+            anyhow::bail!(
+                "Dynamic Maven versions are not supported for {}",
+                dep.package
+            );
+        }
+
+        let library_dir = env_path.join("java-libs");
+        fs::create_dir_all(&library_dir)?;
+
+        let jar_name = format!("{}-{}.jar", artifact, version);
+        let jar_path = library_dir.join(&jar_name);
+        if jar_path.exists() {
+            println!(
+                "{} Installed {}",
+                "[OK]".green().bold(),
+                dep.package.green()
+            );
+            return Ok(());
+        }
+
+        let jar_url = format!(
+            "https://repo1.maven.org/maven2/{}/{}/{}/{}",
+            group.replace('.', "/"),
+            artifact,
+            version,
+            jar_name
+        );
+
+        let response = reqwest::get(&jar_url).await?.error_for_status()?;
+        let content = response.bytes().await?;
+        fs::write(&jar_path, &content)?;
+
+        println!(
+            "{} Installed {}",
+            "[OK]".green().bold(),
+            dep.package.green()
+        );
+        Ok(())
+    }
+
+    fn java_classpath(&self, env_path: &PathBuf) -> Option<String> {
+        let library_dir = env_path.join("java-libs");
+        if !library_dir.is_dir() {
+            return None;
+        }
+
+        let has_jar = fs::read_dir(&library_dir)
+            .ok()?
+            .filter_map(|entry| entry.ok())
+            .any(|entry| {
+                entry
+                    .path()
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .map(|ext| ext.eq_ignore_ascii_case("jar"))
+                    .unwrap_or(false)
+            });
+
+        if has_jar {
+            Some(format!(
+                "{}{}*",
+                library_dir.display(),
+                std::path::MAIN_SEPARATOR
+            ))
+        } else {
+            None
+        }
     }
 
     fn find_runtime_binary(

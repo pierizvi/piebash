@@ -153,7 +153,7 @@ impl DependencyDetector {
         let re1 = Regex::new(r"package ([^\s]+) is not in").ok()?;
         for cap in re1.captures_iter(output) {
             if let Some(pkg) = cap.get(1) {
-                let pkg_name = pkg.as_str().to_string();
+                let pkg_name = pkg.as_str().trim_end_matches(':').to_string();
                 deps.push(MissingDependency {
                     language: "go".to_string(),
                     package: pkg_name.clone(),
@@ -167,7 +167,7 @@ impl DependencyDetector {
         let re2 = Regex::new(r"no required module provides package ([^\s;]+)").ok()?;
         for cap in re2.captures_iter(output) {
             if let Some(pkg) = cap.get(1) {
-                let pkg_name = pkg.as_str().to_string();
+                let pkg_name = pkg.as_str().trim_end_matches(':').to_string();
                 if !deps.iter().any(|d| d.package == pkg_name) {
                     deps.push(MissingDependency {
                         language: "go".to_string(),

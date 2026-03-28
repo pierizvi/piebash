@@ -1,3 +1,5 @@
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.time.LocalDate;
@@ -10,6 +12,7 @@ class TestApp {
 
     public static void main(String[] args) throws Exception {
         List<Integer> numbers = List.of(2, 4, 6, 8, 10);
+        Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
         double sqrt81 = Math.sqrt(81);
         double mean = numbers
@@ -32,9 +35,10 @@ class TestApp {
         payload.put("cwd", cwd);
         payload.put("java_version", javaVersion);
         payload.put("sha256_prefix", shaPrefix);
+        payload.put("gson_version", packageVersion(Gson.class));
 
-        System.out.println("Java runtime test:");
-        System.out.println(toJson(payload));
+        System.out.println("Java runtime + dependency test:");
+        System.out.println(gson.toJson(payload));
     }
 
     private static String sha256Hex(String value) throws Exception {
@@ -47,28 +51,9 @@ class TestApp {
         return out.toString();
     }
 
-    private static String toJson(Map<String, Object> map) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("{\n");
-        int index = 0;
-        for (Map.Entry<String, Object> entry : map.entrySet()) {
-            sb.append("  \"").append(entry.getKey()).append("\": ");
-            Object value = entry.getValue();
-            if (value instanceof Number || value instanceof Boolean) {
-                sb.append(value);
-            } else {
-                sb
-                    .append("\"")
-                    .append(String.valueOf(value).replace("\"", "\\\""))
-                    .append("\"");
-            }
-            if (index < map.size() - 1) {
-                sb.append(",");
-            }
-            sb.append("\n");
-            index++;
-        }
-        sb.append("}");
-        return sb.toString();
+    private static String packageVersion(Class<?> type) {
+        Package pkg = type.getPackage();
+        String version = pkg != null ? pkg.getImplementationVersion() : null;
+        return version != null ? version : "unknown";
     }
 }

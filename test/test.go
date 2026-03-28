@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func mean(nums []int) float64 {
@@ -40,10 +42,11 @@ func main() {
 		"go_version":    runtime.Version(),
 		"os":            runtime.GOOS,
 		"arch":          runtime.GOARCH,
+		"session_id":    uuid.NewString(),
 		"sha256_prefix": digest,
 	}
 
-	fmt.Println("Go runtime test:")
+	fmt.Println("Go runtime + dependency test:")
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(payload)
