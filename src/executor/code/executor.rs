@@ -35,10 +35,16 @@ impl CodeExecutor {
         let runtime = self.runtime_manager.ensure_runtime(language).await?;
 
         // Setup isolated environment
-        let env_path = if language == "python" {
-            self.ensure_python_env(&runtime.path).await?
+        let (env_path, executable) = if language == "python" {
+            let bootstrap_executable =
+                self.python_base_executable(&runtime.path, &runtime.executable);
+            let env_path = self
+                .ensure_python_env(&runtime.path, &bootstrap_executable)
+                .await?;
+            let executable = self.python_env_executable(&env_path);
+            (env_path, executable)
         } else {
-            runtime.path.clone()
+            (runtime.path.clone(), runtime.executable.clone())
         };
 
         // Track installed packages to avoid loops
@@ -62,11 +68,11 @@ impl CodeExecutor {
 
             let result = if command.name.starts_with('@') {
                 let code = command.args.join(" ");
-                self.execute_inline(&runtime.executable, &env_path, language, &code)
+                self.execute_inline(&executable, &env_path, language, &code)
                     .await
             } else if let Some(file_context) = file_context.as_ref() {
                 let args = &command.args[1..];
-                self.execute_file(&runtime.executable, &env_path, language, file_context, args)
+                self.execute_file(&executable, &env_path, language, file_context, args)
                     .await
             } else {
                 anyhow::bail!("No code to execute");
@@ -126,7 +132,7 @@ impl CodeExecutor {
                                 .auto_install_dependency(
                                     dep,
                                     &env_path,
-                                    &runtime.executable,
+                                    &executable,
                                     file_context
                                         .as_ref()
                                         .and_then(|context| context.working_dir.as_ref()),
@@ -170,39 +176,55 @@ impl CodeExecutor {
         }
     }
 
-    async fn ensure_python_env(&self, runtime_path: &PathBuf) -> Result<PathBuf> {
+    async fn ensure_python_env(
+        &self,
+        runtime_path: &PathBuf,
+        runtime_executable: &PathBuf,
+    ) -> Result<PathBuf> {
         let env_path = runtime_path.join("piebash_env");
-        let site_packages = if cfg!(windows) {
-            env_path.join("Lib").join("site-packages")
-        } else {
-            env_path
-                .join("lib")
-                .join("python3.11")
-                .join("site-packages")
-        };
+        let env_python = self.python_env_executable(&env_path);
+        let env_marker = env_path.join("pyvenv.cfg");
 
-        if !site_packages.exists() {
+        if !env_marker.exists() || !env_python.exists() {
             println!(
-                "{} Creating isolated environment (like Docker container)...",
+                "{} Creating isolated Python environment...",
                 "[ENV]".cyan().bold()
             );
-            std::fs::create_dir_all(&site_packages)?;
 
-            let pth_file = if cfg!(windows) {
-                runtime_path.join("python311._pth")
-            } else {
-                site_packages.parent().unwrap().join("sitecustomize.py")
-            };
-
-            if cfg!(windows) {
-                let pth_content = format!(
-                    "python311.zip\n.\n\n# Uncomment to run site.main() automatically\nimport site\n{}",
-                    site_packages.display().to_string().replace('\\', "/")
+            if env_path.exists() {
+                println!(
+                    "{} Recreating incomplete Python environment",
+                    "[FIX]".yellow().bold()
                 );
-                std::fs::write(&pth_file, pth_content)?;
+                std::fs::remove_dir_all(&env_path)?;
             }
 
-            println!("{} Isolated environment created", "[OK]".green().bold());
+            let mut cmd = Command::new(runtime_executable);
+            cmd.arg("-m");
+            cmd.arg("venv");
+            cmd.arg(&env_path);
+            cmd.stdin(Stdio::null());
+            cmd.stdout(Stdio::piped());
+            cmd.stderr(Stdio::piped());
+
+            let output = cmd.output().await?;
+            if !output.status.success() {
+                let stdout_text = String::from_utf8_lossy(&output.stdout);
+                let stderr_text = String::from_utf8_lossy(&output.stderr);
+                anyhow::bail!(
+                    "Failed to create Python environment\nSTDERR:\n{}\nSTDOUT:\n{}",
+                    stderr_text,
+                    stdout_text
+                );
+            }
+
+            if !env_marker.exists() || !env_python.exists() {
+                anyhow::bail!(
+                    "Python environment creation completed but the virtual environment is incomplete"
+                );
+            }
+
+            println!("{} Python environment ready", "[OK]".green().bold());
         }
 
         Ok(env_path)
@@ -372,29 +394,24 @@ impl CodeExecutor {
     fn set_runtime_env(&self, cmd: &mut Command, env_path: &PathBuf, language: &str) {
         match language {
             "python" => {
-                let site_packages = if cfg!(windows) {
-                    env_path.join("Lib").join("site-packages")
+                let scripts_dir = if cfg!(windows) {
+                    env_path.join("Scripts")
                 } else {
-                    env_path
-                        .join("lib")
-                        .join("python3.11")
-                        .join("site-packages")
+                    env_path.join("bin")
                 };
 
-                if site_packages.exists() {
-                    let current_path = std::env::var("PYTHONPATH").unwrap_or_default();
+                if scripts_dir.exists() {
+                    let current_path = std::env::var("PATH").unwrap_or_default();
+                    let separator = if cfg!(windows) { ";" } else { ":" };
                     let new_path = if current_path.is_empty() {
-                        site_packages.to_string_lossy().to_string()
+                        scripts_dir.to_string_lossy().to_string()
                     } else {
-                        format!(
-                            "{}{}{}",
-                            site_packages.display(),
-                            if cfg!(windows) { ";" } else { ":" },
-                            current_path
-                        )
+                        format!("{}{}{}", scripts_dir.display(), separator, current_path)
                     };
-                    cmd.env("PYTHONPATH", new_path);
+                    cmd.env("PATH", new_path);
                 }
+
+                cmd.env("VIRTUAL_ENV", env_path);
             }
             "node" => {
                 let node_modules = env_path.join("node_modules");
@@ -454,26 +471,15 @@ impl CodeExecutor {
     async fn install_python_package(
         &self,
         dep: &MissingDependency,
-        env_path: &PathBuf,
+        _env_path: &PathBuf,
         python_exe: &PathBuf,
     ) -> Result<()> {
-        self.ensure_pip(python_exe, env_path).await?;
-
-        let site_packages = if cfg!(windows) {
-            env_path.join("Lib").join("site-packages")
-        } else {
-            env_path
-                .join("lib")
-                .join("python3.11")
-                .join("site-packages")
-        };
+        self.ensure_pip(python_exe).await?;
 
         let mut cmd = Command::new(python_exe);
         cmd.arg("-m");
         cmd.arg("pip");
         cmd.arg("install");
-        cmd.arg("--target");
-        cmd.arg(&site_packages);
         cmd.arg("--upgrade");
         cmd.arg("--quiet"); // Less verbose output
         cmd.arg(&dep.package);
@@ -495,23 +501,13 @@ impl CodeExecutor {
         Ok(())
     }
 
-    async fn ensure_pip(&self, python_exe: &PathBuf, env_path: &PathBuf) -> Result<()> {
+    async fn ensure_pip(&self, python_exe: &PathBuf) -> Result<()> {
         let mut check = Command::new(python_exe);
         check.arg("-m");
         check.arg("pip");
         check.arg("--version");
         check.stdout(Stdio::null());
         check.stderr(Stdio::null());
-
-        let site_packages = if cfg!(windows) {
-            env_path.join("Lib").join("site-packages")
-        } else {
-            env_path
-                .join("lib")
-                .join("python3.11")
-                .join("site-packages")
-        };
-        check.env("PYTHONPATH", &site_packages);
 
         if check
             .status()
@@ -525,24 +521,15 @@ impl CodeExecutor {
 
         println!("{} Bootstrapping pip...", "[BOOTSTRAP]".yellow().bold());
 
-        let get_pip_url = "https://bootstrap.pypa.io/get-pip.py";
-        let get_pip_path = env_path.join("get-pip.py");
-
-        let response = reqwest::get(get_pip_url).await?;
-        let content = response.bytes().await?;
-        std::fs::write(&get_pip_path, &content)?;
-
         let mut cmd = Command::new(python_exe);
-        cmd.arg(&get_pip_path);
-        cmd.arg("--target");
-        cmd.arg(&site_packages);
-        cmd.arg("--quiet");
+        cmd.arg("-m");
+        cmd.arg("ensurepip");
+        cmd.arg("--upgrade");
         cmd.stdin(Stdio::null());
         cmd.stdout(Stdio::null());
         cmd.stderr(Stdio::inherit());
 
         let status = cmd.status().await?;
-        let _ = std::fs::remove_file(&get_pip_path);
 
         if !status.success() {
             anyhow::bail!("Failed to bootstrap pip");
@@ -805,5 +792,38 @@ impl CodeExecutor {
         }
 
         None
+    }
+
+    fn python_env_executable(&self, env_path: &Path) -> PathBuf {
+        if cfg!(windows) {
+            env_path.join("Scripts").join("python.exe")
+        } else {
+            env_path.join("bin").join("python")
+        }
+    }
+
+    fn python_base_executable(&self, runtime_path: &Path, runtime_executable: &Path) -> PathBuf {
+        let base = if cfg!(windows) {
+            runtime_path.join("python").join("python.exe")
+        } else {
+            runtime_path.join("bin").join("python")
+        };
+
+        if base.is_file() {
+            return base;
+        }
+
+        let env_root = runtime_path.join("piebash_env");
+        if runtime_executable.starts_with(&env_root) {
+            return self.find_runtime_binary(
+                &runtime_executable.to_path_buf(),
+                &runtime_path.to_path_buf(),
+                "python",
+            )
+            .filter(|candidate| !candidate.starts_with(&env_root))
+            .unwrap_or_else(|| runtime_executable.to_path_buf());
+        }
+
+        runtime_executable.to_path_buf()
     }
 }

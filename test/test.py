@@ -13,8 +13,6 @@ import numpy as np
 import pandas as pd
 import requests
 
-# pip install requests numpy pandas
-
 
 def main() -> None:
     numbers = [2, 4, 6, 8, 10]

@@ -163,10 +163,13 @@ impl RuntimeManager {
         let candidates = vec![
             runtime_dir.join("bin").join(exe_name),
             runtime_dir.join(exe_name),
+            runtime_dir.join("python").join(exe_name),
             #[cfg(windows)]
             runtime_dir.join("bin").join(format!("{}.exe", exe_name)),
             #[cfg(windows)]
             runtime_dir.join(format!("{}.exe", exe_name)),
+            #[cfg(windows)]
+            runtime_dir.join("python").join(format!("{}.exe", exe_name)),
         ];
 
         for candidate in candidates {
@@ -186,6 +189,14 @@ impl RuntimeManager {
             .filter_map(|e| e.ok())
         {
             if !entry.file_type().is_file() {
+                continue;
+            }
+
+            if entry
+                .path()
+                .components()
+                .any(|component| component.as_os_str() == "piebash_env")
+            {
                 continue;
             }
 
