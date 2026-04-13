@@ -8,7 +8,7 @@ use crate::shell::parser::Command as ShellCommand;
 
 pub async fn pip_install(command: &ShellCommand, runtime_manager: &RuntimeManager) -> Result<()> {
     if command.args.is_empty() {
-        anyhow::bail!("pip: missing package name");
+        anyhow::bail!("pip: missing arguments");
     }
 
     // Ensure Python runtime is installed
@@ -28,9 +28,7 @@ pub async fn pip_install(command: &ShellCommand, runtime_manager: &RuntimeManage
 
     println!("{} Installing Python packages...", "[PIP]".cyan().bold());
 
-    // Run pip install
     let mut cmd = Command::new(&pip_path);
-    cmd.arg("install");
     cmd.args(&command.args);
     cmd.stdin(Stdio::inherit());
     cmd.stdout(Stdio::inherit());
@@ -48,7 +46,7 @@ pub async fn pip_install(command: &ShellCommand, runtime_manager: &RuntimeManage
 
 pub async fn npm_install(command: &ShellCommand, runtime_manager: &RuntimeManager) -> Result<()> {
     if command.args.is_empty() {
-        anyhow::bail!("npm: missing package name");
+        anyhow::bail!("npm: missing arguments");
     }
 
     let node_runtime = runtime_manager.ensure_runtime("node").await?;
@@ -66,8 +64,6 @@ pub async fn npm_install(command: &ShellCommand, runtime_manager: &RuntimeManage
     println!("{} Installing Node.js packages...", "[NPM]".cyan().bold());
 
     let mut cmd = Command::new(&npm_path);
-    cmd.arg("install");
-    cmd.arg("-g");
     cmd.args(&command.args);
     cmd.stdin(Stdio::inherit());
     cmd.stdout(Stdio::inherit());
@@ -85,7 +81,7 @@ pub async fn npm_install(command: &ShellCommand, runtime_manager: &RuntimeManage
 
 pub async fn cargo_install(command: &ShellCommand, runtime_manager: &RuntimeManager) -> Result<()> {
     if command.args.is_empty() {
-        anyhow::bail!("cargo: missing package name");
+        anyhow::bail!("cargo: missing arguments");
     }
 
     let rust_runtime = runtime_manager.ensure_runtime("rust").await?;
@@ -103,7 +99,6 @@ pub async fn cargo_install(command: &ShellCommand, runtime_manager: &RuntimeMana
     println!("{} Installing Rust packages...", "[CARGO]".cyan().bold());
 
     let mut cmd = Command::new(&cargo_path);
-    cmd.arg("install");
     cmd.args(&command.args);
     cmd.stdin(Stdio::inherit());
     cmd.stdout(Stdio::inherit());
@@ -121,7 +116,7 @@ pub async fn cargo_install(command: &ShellCommand, runtime_manager: &RuntimeMana
 
 pub async fn gem_install(command: &ShellCommand, runtime_manager: &RuntimeManager) -> Result<()> {
     if command.args.is_empty() {
-        anyhow::bail!("gem: missing package name");
+        anyhow::bail!("gem: missing arguments");
     }
 
     let ruby_runtime = runtime_manager.ensure_runtime("ruby").await?;
@@ -139,7 +134,6 @@ pub async fn gem_install(command: &ShellCommand, runtime_manager: &RuntimeManage
     println!("{} Installing Ruby gems...", "[GEM]".cyan().bold());
 
     let mut cmd = Command::new(&gem_path);
-    cmd.arg("install");
     cmd.args(&command.args);
     cmd.stdin(Stdio::inherit());
     cmd.stdout(Stdio::inherit());

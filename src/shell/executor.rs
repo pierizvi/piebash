@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::process::Stdio;
-use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
 use crate::shell::environment::Environment;
@@ -14,11 +14,6 @@ impl CommandExecutor {
     }
 
     pub async fn execute(&self, command: &ShellCommand, env: &Environment) -> Result<()> {
-        // Handle piped commands
-        if command.pipe_to.is_some() {
-            return self.execute_pipeline(command, env).await;
-        }
-
         // Handle redirects
         if command.redirect_stdout.is_some() {
             return self.execute_with_redirect(command, env).await;
@@ -88,47 +83,41 @@ impl CommandExecutor {
         Ok(())
     }
 
-    async fn execute_pipeline(&self, command: &ShellCommand, env: &Environment) -> Result<()> {
-        // Simplified: use shell to execute pipe for now
-        // This is a temporary workaround - we'll improve it later
+    pub async fn capture_output(
+        &self,
+        command: &ShellCommand,
+        env: &Environment,
+        input: &[u8],
+    ) -> Result<Vec<u8>> {
+        let cmd_path = which::which(&command.name)
+            .map_err(|_| anyhow::anyhow!("Command not found: {}", command.name))?;
 
-        if let Some(next_cmd) = &command.pipe_to {
-            // Build the full pipeline command
-            let full_command = format!(
-                "{} {} | {} {}",
-                command.name,
-                command.args.join(" "),
-                next_cmd.name,
-                next_cmd.args.join(" ")
-            );
+        let stdin = if input.is_empty() {
+            Stdio::null()
+        } else {
+            Stdio::piped()
+        };
 
-            // Execute via system shell
-            #[cfg(windows)]
-            let shell_cmd = "cmd";
-            #[cfg(windows)]
-            let shell_arg = "/C";
+        let mut child = Command::new(cmd_path)
+            .args(&command.args)
+            .stdin(stdin)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .envs(env.get_all_vars())
+            .spawn()?;
 
-            #[cfg(not(windows))]
-            let shell_cmd = "sh";
-            #[cfg(not(windows))]
-            let shell_arg = "-c";
-
-            let mut child = Command::new(shell_cmd)
-                .arg(shell_arg)
-                .arg(&full_command)
-                .stdin(Stdio::inherit())
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .envs(env.get_all_vars())
-                .spawn()?;
-
-            let status = child.wait().await?;
-
-            if !status.success() {
-                anyhow::bail!("Pipeline failed");
+        if !input.is_empty() {
+            if let Some(mut stdin) = child.stdin.take() {
+                stdin.write_all(input).await?;
             }
         }
 
-        Ok(())
+        let output = child.wait_with_output().await?;
+
+        if !output.status.success() {
+            anyhow::bail!("Command failed with exit code: {:?}", output.status.code());
+        }
+
+        Ok(output.stdout)
     }
 }

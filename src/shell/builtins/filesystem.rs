@@ -393,7 +393,7 @@ pub fn ln(command: &Command) -> Result<()> {
     Ok(())
 }
 
-pub fn chmod(command: &Command) -> Result<()> {
+pub fn chmod(_command: &Command) -> Result<()> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -429,7 +429,7 @@ pub fn chmod(command: &Command) -> Result<()> {
     Ok(())
 }
 
-pub fn chown(command: &Command) -> Result<()> {
+pub fn chown(_command: &Command) -> Result<()> {
     #[cfg(unix)]
     {
         eprintln!("chown: not yet implemented");

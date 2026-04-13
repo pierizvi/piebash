@@ -19,10 +19,10 @@ impl Builtins {
         Self {
             commands: vec![
                 "cd", "pwd", "echo", "export", "env", "set", "unset", "alias", "unalias", "help",
-                "clear", "history", "ls", "cat", "touch", "mkdir", "rm", "cp", "mv", "ln", "chmod",
-                "chown", "stat", "file", "grep", "find", "wc", "head", "tail", "sort", "uniq",
-                "which", "wget", "curl", "true", "false", "sleep", "kill", "type", "pip", "npm",
-                "cargo", "gem", // ADDED: Package managers
+                "clear", "history", "ls", "cat", "touch", "mkdir", "rm", "cp", "mv", "ln",
+                "chmod", "chown", "stat", "file", "grep", "find", "wc", "head", "tail", "sort",
+                "uniq", "which", "wget", "curl", "true", "false", "yes", "sleep", "kill", "type",
+                "pip", "npm", "cargo", "gem",
             ]
             .into_iter()
             .map(String::from)

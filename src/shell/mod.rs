@@ -54,49 +54,44 @@ impl Shell {
     }
 
     async fn execute_command_chain(&mut self, command: &parser::Command) -> Result<()> {
-        let mut current_command = command;
-        let mut last_result: Result<()> = Ok(());
+        let mut current = command;
+        let mut last_result = self.execute_single_command(current, 0).await;
 
-        loop {
-            // Execute the current command
-            last_result = self.execute_single_command(current_command).await;
+        while let Some(next_cmd) = current.next_command.as_deref() {
+            let should_continue = match current.chain_operator {
+                Some(parser::ChainOperator::And) => last_result.is_ok(),
+                Some(parser::ChainOperator::Or) => last_result.is_err(),
+                Some(parser::ChainOperator::Semicolon) => true,
+                None => false,
+            };
 
-            // Check if there's a chained command
-            if let Some(ref next_cmd) = current_command.next_command {
-                match current_command.chain_operator {
-                    Some(parser::ChainOperator::And) => {
-                        // && - continue only if last succeeded
-                        if last_result.is_err() {
-                            return last_result;
-                        }
-                    }
-                    Some(parser::ChainOperator::Or) => {
-                        // || - continue only if last failed
-                        if last_result.is_ok() {
-                            return last_result;
-                        }
-                    }
-                    Some(parser::ChainOperator::Semicolon) => {
-                        // ; - always continue (ignore last result)
-                    }
-                    None => {
-                        break;
-                    }
-                }
-
-                // Move to next command
-                current_command = next_cmd;
-            } else {
-                // No more commands
-                break;
+            if !should_continue {
+                return last_result;
             }
+
+            current = next_cmd;
+            last_result = self.execute_single_command(current, 0).await;
         }
 
         last_result
     }
 
-    async fn execute_single_command(&mut self, command: &parser::Command) -> Result<()> {
-        let cmd_lower = command.name.to_lowercase();
+    async fn execute_single_command(
+        &mut self,
+        command: &parser::Command,
+        alias_depth: usize,
+    ) -> Result<()> {
+        let mut expanded_command = command.clone();
+        let mut depth = alias_depth;
+        while let Some(next) = self.expand_alias(&expanded_command)? {
+            depth += 1;
+            if depth > 10 {
+                anyhow::bail!("Alias expansion exceeded maximum depth");
+            }
+            expanded_command = next;
+        }
+
+        let cmd_lower = expanded_command.name.to_lowercase();
 
         // Handle pipes specially
         if cmd_lower == "piebash" {
@@ -106,80 +101,134 @@ impl Shell {
         }
 
         // Handle pipes specially
-        if command.pipe_to.is_some() {
-            return self.execute_pipeline(&command).await;
+        if expanded_command.pipe_to.is_some() {
+            return self.execute_pipeline(&expanded_command, depth).await;
         }
+
         // Check if it's a built-in
-        if self.builtins.is_builtin(&cmd_lower) {
-            let mut normalized = command.clone();
+        if self.should_use_builtin(&expanded_command, &cmd_lower) {
+            let mut normalized = expanded_command.clone();
             normalized.name = cmd_lower;
             return self.execute_builtin(&normalized).await;
         }
 
         // Check if it's code execution
-        if self.is_code_execution(command) {
-            let mut normalized = command.clone();
+        if self.is_code_execution(&expanded_command) {
+            let mut normalized = expanded_command.clone();
             normalized.name = cmd_lower;
             return self.execute_code(&normalized).await;
         }
 
         // Execute as external command
-        self.executor.execute(&command, &self.environment).await
+        self.executor.execute(&expanded_command, &self.environment).await
     }
 
-    async fn execute_pipeline(&mut self, command: &parser::Command) -> Result<()> {
-        // For built-in to built-in pipes, handle internally
-        if self.builtins.is_builtin(&command.name) {
-            if let Some(next_cmd) = &command.pipe_to {
-                if self.builtins.is_builtin(&next_cmd.name) {
-                    // Both are built-ins - handle internally
-                    let output = self.capture_builtin_output(&command)?;
+    async fn execute_pipeline(
+        &mut self,
+        command: &parser::Command,
+        alias_depth: usize,
+    ) -> Result<()> {
+        let output = self.capture_pipeline_output(command, &[], alias_depth).await?;
+        let final_stage = Self::last_pipeline_stage(command);
 
-                    // Filter the output through the second command
-                    self.execute_builtin_with_input(next_cmd, &output).await?;
-                    return Ok(());
-                }
-            }
+        if let Some(redirect) = &final_stage.redirect_stdout {
+            self.write_output(redirect, &output)?;
+        } else {
+            std::io::stdout().write_all(&output)?;
+            std::io::stdout().flush()?;
         }
 
-        // Fall back to external executor for other cases
-        self.executor.execute(&command, &self.environment).await
+        Ok(())
     }
 
     async fn execute_builtin(&mut self, command: &parser::Command) -> Result<()> {
         if let Some(redirect) = &command.redirect_stdout {
-            let output = match command.name.as_str() {
-                "echo" => command.args.join(" ") + "\n",
-                _ => self.capture_builtin_output(command)?,
-            };
-            let mut file = if redirect.append {
-                OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&redirect.target)?
-            } else {
-                OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .truncate(true)
-                    .open(&redirect.target)?
-            };
-            write!(file, "{}", output)?;
+            let output = self.capture_builtin_output(command, &[]).await?;
+            self.write_output(redirect, &output)?;
             return Ok(());
         }
 
-        // Pass runtime_manager to async execute
         self.builtins
             .execute_async(command, &mut self.environment, Some(&self.runtime_manager))
             .await
     }
 
-    fn capture_builtin_output(&mut self, command: &parser::Command) -> Result<String> {
+    async fn capture_pipeline_output(
+        &mut self,
+        command: &parser::Command,
+        input: &[u8],
+        alias_depth: usize,
+    ) -> Result<Vec<u8>> {
+        let mut current = command;
+        let mut current_input = input.to_vec();
+
+        loop {
+            let output = self
+                .capture_command_output(current, &current_input, alias_depth)
+                .await?;
+
+            if let Some(next_cmd) = &current.pipe_to {
+                current = next_cmd;
+                current_input = output;
+            } else {
+                return Ok(output);
+            }
+        }
+    }
+
+    async fn capture_command_output(
+        &mut self,
+        command: &parser::Command,
+        input: &[u8],
+        alias_depth: usize,
+    ) -> Result<Vec<u8>> {
+        let mut expanded_command = command.clone();
+        let mut depth = alias_depth;
+        while let Some(next) = self.expand_alias(&expanded_command)? {
+            depth += 1;
+            if depth > 10 {
+                anyhow::bail!("Alias expansion exceeded maximum depth");
+            }
+            expanded_command = next;
+        }
+
+        let mut normalized = expanded_command;
+        normalized.name = normalized.name.to_lowercase();
+        normalized.pipe_to = None;
+        normalized.chain_operator = None;
+        normalized.next_command = None;
+        normalized.redirect_stdout = None;
+        normalized.redirect_stderr = None;
+
+        if normalized.name == "piebash" {
+            anyhow::bail!(
+                "Cannot run piebash inside piebash. Use 'exit' to return to the parent shell."
+            );
+        }
+
+        if self.should_use_builtin(&normalized, &normalized.name) {
+            return self.capture_builtin_output(&normalized, input).await;
+        }
+
+        if self.is_code_execution(&normalized) {
+            anyhow::bail!("Code execution is not supported in pipelines");
+        }
+
+        self.executor
+            .capture_output(&normalized, &self.environment, input)
+            .await
+    }
+
+    async fn capture_builtin_output(
+        &mut self,
+        command: &parser::Command,
+        input: &[u8],
+    ) -> Result<Vec<u8>> {
         match command.name.as_str() {
-            "echo" => Ok(command.args.join(" ") + "\n"),
-            "pwd" => Ok(format!("{}\n", self.environment.get_cwd().display())),
-            "ls" => self.capture_ls_output(command),
-            "cat" => self.capture_cat_output(command),
+            "echo" => Ok((command.args.join(" ") + "\n").into_bytes()),
+            "pwd" => Ok(format!("{}\n", self.environment.get_cwd().display()).into_bytes()),
+            "ls" => Ok(self.capture_ls_output(command)?.into_bytes()),
+            "cat" => Ok(self.capture_cat_output(command, input)?.into_bytes()),
             "env" => {
                 let mut output = String::new();
                 let mut vars: Vec<_> = self.environment.get_all_vars().iter().collect();
@@ -187,11 +236,27 @@ impl Shell {
                 for (key, value) in vars {
                     output.push_str(&format!("{}={}\n", key, value));
                 }
-                Ok(output)
+                Ok(output.into_bytes())
             }
+            "grep" => Ok(self.capture_grep_output(command, input)?.into_bytes()),
+            "wc" => Ok(self.capture_wc_output(command, input)?.into_bytes()),
+            "head" => Ok(self.capture_head_output(command, input)?.into_bytes()),
+            "tail" => Ok(self.capture_tail_output(command, input)?.into_bytes()),
+            "sort" => Ok(self.capture_sort_output(command, input)?.into_bytes()),
+            "uniq" => Ok(self.capture_uniq_output(command, input)?.into_bytes()),
+            "which" => Ok(self.capture_which_output(command)?.into_bytes()),
+            "true" => Ok(Vec::new()),
+            "false" => anyhow::bail!("false"),
+            "yes" if input.is_empty() => anyhow::bail!("yes cannot be captured safely"),
+            _ if !input.is_empty() => anyhow::bail!(
+                "{} does not support piped stdin in piebash yet",
+                command.name
+            ),
             _ => {
-                self.builtins.execute(&command, &mut self.environment)?;
-                Ok(String::new())
+                self.builtins
+                    .execute_async(command, &mut self.environment, Some(&self.runtime_manager))
+                    .await?;
+                Ok(Vec::new())
             }
         }
     }
@@ -254,13 +319,18 @@ impl Shell {
         Ok(output)
     }
 
-    fn capture_cat_output(&self, command: &parser::Command) -> Result<String> {
+    fn capture_cat_output(&self, command: &parser::Command, input: &[u8]) -> Result<String> {
         use std::fs;
         use std::path::Path;
 
+        let file_args: Vec<&String> = command.args.iter().filter(|arg| !arg.starts_with('-')).collect();
+        if file_args.is_empty() {
+            return Ok(String::from_utf8_lossy(input).to_string());
+        }
+
         let mut output = String::new();
 
-        for file in &command.args {
+        for file in file_args {
             let path = Path::new(file.as_str());
             if !path.exists() {
                 continue;
@@ -271,28 +341,311 @@ impl Shell {
         Ok(output)
     }
 
-    async fn execute_builtin_with_input(
-        &mut self,
-        command: &parser::Command,
-        input: &str,
-    ) -> Result<()> {
-        match command.name.as_str() {
-            "grep" => {
-                if command.args.is_empty() {
-                    anyhow::bail!("grep: missing pattern");
-                }
+    fn capture_grep_output(&self, command: &parser::Command, input: &[u8]) -> Result<String> {
+        let pattern = command
+            .args
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("grep: missing pattern"))?;
+        let regex = regex::Regex::new(pattern)?;
+        let file_args: Vec<&String> = command.args.iter().skip(1).collect();
+        let mut output = String::new();
 
-                let pattern = &command.args[0];
-
-                for line in input.lines() {
-                    if line.contains(pattern) {
-                        println!("{}", line);
-                    }
+        if file_args.is_empty() {
+            for line in String::from_utf8_lossy(input).lines() {
+                if regex.is_match(line) {
+                    output.push_str(line);
+                    output.push('\n');
                 }
-                Ok(())
             }
-            _ => self.builtins.execute(&command, &mut self.environment),
+            return Ok(output);
         }
+
+        for file in file_args {
+            let path = std::path::Path::new(file.as_str());
+            if !path.exists() {
+                continue;
+            }
+
+            let contents = std::fs::read_to_string(path)?;
+            for line in contents.lines() {
+                if regex.is_match(line) {
+                    output.push_str(line);
+                    output.push('\n');
+                }
+            }
+        }
+
+        Ok(output)
+    }
+
+    fn capture_wc_output(&self, command: &parser::Command, input: &[u8]) -> Result<String> {
+        let count_lines = command.args.iter().any(|arg| arg == "-l");
+        let count_words = command.args.iter().any(|arg| arg == "-w");
+        let count_chars = command.args.iter().any(|arg| arg == "-c");
+        let show_all = !count_lines && !count_words && !count_chars;
+        let file_args: Vec<&String> = command.args.iter().filter(|arg| !arg.starts_with('-')).collect();
+
+        if file_args.is_empty() {
+            let contents = String::from_utf8_lossy(input);
+            let lines = contents.lines().count();
+            let words = contents.split_whitespace().count();
+            let chars = contents.len();
+            return Ok(self.format_wc_counts(lines, words, chars, show_all, count_lines, count_words, count_chars));
+        }
+
+        let mut output = String::new();
+        for file in file_args {
+            let contents = std::fs::read_to_string(file)?;
+            let lines = contents.lines().count();
+            let words = contents.split_whitespace().count();
+            let chars = contents.len();
+            output.push_str(&self.format_wc_counts(
+                lines,
+                words,
+                chars,
+                show_all,
+                count_lines,
+                count_words,
+                count_chars,
+            ));
+            output.push(' ');
+            output.push_str(file);
+            output.push('\n');
+        }
+
+        Ok(output)
+    }
+
+    fn format_wc_counts(
+        &self,
+        lines: usize,
+        words: usize,
+        chars: usize,
+        show_all: bool,
+        count_lines: bool,
+        count_words: bool,
+        count_chars: bool,
+    ) -> String {
+        if show_all {
+            return format!("{:>8} {:>8} {:>8}\n", lines, words, chars);
+        }
+
+        let mut parts = Vec::new();
+        if count_lines {
+            parts.push(format!("{:>8}", lines));
+        }
+        if count_words {
+            parts.push(format!("{:>8}", words));
+        }
+        if count_chars {
+            parts.push(format!("{:>8}", chars));
+        }
+
+        format!("{}\n", parts.join(" "))
+    }
+
+    fn capture_head_output(&self, command: &parser::Command, input: &[u8]) -> Result<String> {
+        let (limit, contents) = self.read_count_and_contents(command, input, "head")?;
+        Ok(contents
+            .lines()
+            .take(limit)
+            .map(|line| format!("{}\n", line))
+            .collect())
+    }
+
+    fn capture_tail_output(&self, command: &parser::Command, input: &[u8]) -> Result<String> {
+        let (limit, contents) = self.read_count_and_contents(command, input, "tail")?;
+        let lines: Vec<&str> = contents.lines().collect();
+        let start = lines.len().saturating_sub(limit);
+        Ok(lines[start..]
+            .iter()
+            .map(|line| format!("{}\n", line))
+            .collect())
+    }
+
+    fn capture_sort_output(&self, command: &parser::Command, input: &[u8]) -> Result<String> {
+        let reverse = command.args.iter().any(|arg| arg == "-r");
+        let contents = self.read_input_or_file(command, input)?;
+        let mut lines = contents.lines().collect::<Vec<_>>();
+        if reverse {
+            lines.sort_by(|a, b| b.cmp(a));
+        } else {
+            lines.sort();
+        }
+        Ok(lines
+            .into_iter()
+            .map(|line| format!("{}\n", line))
+            .collect())
+    }
+
+    fn capture_uniq_output(&self, command: &parser::Command, input: &[u8]) -> Result<String> {
+        let count = command.args.iter().any(|arg| arg == "-c");
+        let contents = self.read_input_or_file(command, input)?;
+        let lines = contents.lines().collect::<Vec<_>>();
+        let mut output = String::new();
+        let mut previous = None;
+        let mut occurrences = 0;
+
+        for line in lines {
+            if previous == Some(line) {
+                occurrences += 1;
+                continue;
+            }
+
+            if let Some(prev) = previous {
+                if count {
+                    output.push_str(&format!("{:>7} {}\n", occurrences, prev));
+                } else {
+                    output.push_str(prev);
+                    output.push('\n');
+                }
+            }
+
+            previous = Some(line);
+            occurrences = 1;
+        }
+
+        if let Some(prev) = previous {
+            if count {
+                output.push_str(&format!("{:>7} {}\n", occurrences, prev));
+            } else {
+                output.push_str(prev);
+                output.push('\n');
+            }
+        }
+
+        Ok(output)
+    }
+
+    fn capture_which_output(&self, command: &parser::Command) -> Result<String> {
+        if command.args.is_empty() {
+            anyhow::bail!("which: missing command");
+        }
+
+        let mut output = String::new();
+        for arg in &command.args {
+            if let Ok(path) = which::which(arg) {
+                output.push_str(&format!("{}\n", path.display()));
+            }
+        }
+
+        Ok(output)
+    }
+
+    fn read_count_and_contents(
+        &self,
+        command: &parser::Command,
+        input: &[u8],
+        command_name: &str,
+    ) -> Result<(usize, String)> {
+        let mut limit = 10;
+        let mut i = 0;
+
+        while i < command.args.len() {
+            if command.args[i] == "-n" && i + 1 < command.args.len() {
+                limit = command.args[i + 1].parse::<usize>().unwrap_or(10);
+                i += 2;
+            } else {
+                i += 1;
+            }
+        }
+
+        let contents = self.read_input_or_file(command, input)?;
+        if command
+            .args
+            .iter()
+            .enumerate()
+            .all(|(index, arg)| arg.starts_with('-') || (index > 0 && command.args[index - 1] == "-n"))
+            && input.is_empty()
+        {
+            anyhow::bail!("{}: missing file", command_name);
+        }
+
+        Ok((limit, contents))
+    }
+
+    fn read_input_or_file(&self, command: &parser::Command, input: &[u8]) -> Result<String> {
+        let file_arg = command
+            .args
+            .iter()
+            .enumerate()
+            .find_map(|(index, arg)| {
+                if arg.starts_with('-') {
+                    if arg == "-n" && index + 1 < command.args.len() {
+                        return None;
+                    }
+                    return None;
+                }
+
+                if index > 0 && command.args[index - 1] == "-n" {
+                    return None;
+                }
+
+                Some(arg)
+            });
+
+        if let Some(file) = file_arg {
+            return Ok(std::fs::read_to_string(file)?);
+        }
+
+        Ok(String::from_utf8_lossy(input).to_string())
+    }
+
+    fn write_output(&self, redirect: &parser::Redirect, output: &[u8]) -> Result<()> {
+        let mut file = if redirect.append {
+            OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&redirect.target)?
+        } else {
+            OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&redirect.target)?
+        };
+        file.write_all(output)?;
+        Ok(())
+    }
+
+    fn should_use_builtin(&self, command: &parser::Command, cmd_lower: &str) -> bool {
+        self.builtins.is_builtin(cmd_lower) && !self.should_fall_back_to_external(command, cmd_lower)
+    }
+
+    fn should_fall_back_to_external(&self, command: &parser::Command, cmd_lower: &str) -> bool {
+        match cmd_lower {
+            "pip" | "npm" | "gem" => !matches!(command.args.first().map(String::as_str), Some("install")),
+            "cargo" => !matches!(command.args.first().map(String::as_str), Some("install") | Some("add")),
+            _ => false,
+        }
+    }
+
+    fn expand_alias(&self, command: &parser::Command) -> Result<Option<parser::Command>> {
+        let alias = match self.environment.get_alias(&command.name) {
+            Some(alias) => alias,
+            None => return Ok(None),
+        };
+
+        let env_map = self.environment.get_all_vars().clone();
+        let mut expanded = self.parser.parse_with_env(&alias, &env_map)?;
+        if expanded.pipe_to.is_some()
+            || expanded.next_command.is_some()
+            || expanded.redirect_stdout.is_some()
+            || expanded.redirect_stderr.is_some()
+        {
+            anyhow::bail!("Aliases must expand to a simple command");
+        }
+
+        expanded.args.extend(command.args.clone());
+        Ok(Some(expanded))
+    }
+
+    fn last_pipeline_stage(command: &parser::Command) -> &parser::Command {
+        let mut current = command;
+        while let Some(next) = &current.pipe_to {
+            current = next;
+        }
+        current
     }
 
     fn is_code_execution(&self, command: &parser::Command) -> bool {

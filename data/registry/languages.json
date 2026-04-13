@@ -5,14 +5,19 @@
       "name": "Python",
       "version": "3.11.6",
       "executable": "python",
+      "package_manager": {
+        "name": "pip",
+        "executable": "pip",
+        "install_cmd": ["install"]
+      },
       "downloads": {
         "linux-x86_64": {
           "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz",
           "sha256": ""
         },
         "windows-x86_64": {
-          "url": "https://www.python.org/ftp/python/3.11.6/python-3.11.6-embed-amd64.zip",
-          "sha256": ""
+          "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-pc-windows-msvc-shared-install_only.tar.gz",
+          "sha256": "3933545e6d41462dd6a47e44133ea40995bc6efeed8c2e4cbdf1a699303e95ea"
         },
         "darwin-x86_64": {
           "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-apple-darwin-install_only.tar.gz",
@@ -24,6 +29,11 @@
       "name": "Node.js",
       "version": "20.10.0",
       "executable": "node",
+      "package_manager": {
+        "name": "npm",
+        "executable": "npm",
+        "install_cmd": ["install", "-g"]
+      },
       "downloads": {
         "linux-x86_64": {
           "url": "https://nodejs.org/dist/v20.10.0/node-v20.10.0-linux-x64.tar.xz",
@@ -35,6 +45,98 @@
         },
         "darwin-x86_64": {
           "url": "https://nodejs.org/dist/v20.10.0/node-v20.10.0-darwin-x64.tar.gz",
+          "sha256": ""
+        }
+      }
+    },
+    "java": {
+      "name": "Java",
+      "version": "21.0.5",
+      "executable": "java",
+      "package_manager": null,
+      "downloads": {
+        "linux-x86_64": {
+          "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_linux_hotspot_21.0.5_11.tar.gz",
+          "sha256": ""
+        },
+        "windows-x86_64": {
+          "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_windows_hotspot_21.0.5_11.zip",
+          "sha256": ""
+        },
+        "darwin-x86_64": {
+          "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_mac_hotspot_21.0.5_11.tar.gz",
+          "sha256": ""
+        }
+      }
+    },
+    "go": {
+      "name": "Go",
+      "version": "1.21.5",
+      "executable": "go",
+      "package_manager": {
+        "name": "go",
+        "executable": "go",
+        "install_cmd": ["install"]
+      },
+      "downloads": {
+        "linux-x86_64": {
+          "url": "https://go.dev/dl/go1.21.5.linux-amd64.tar.gz",
+          "sha256": ""
+        },
+        "windows-x86_64": {
+          "url": "https://go.dev/dl/go1.21.5.windows-amd64.zip",
+          "sha256": ""
+        },
+        "darwin-x86_64": {
+          "url": "https://go.dev/dl/go1.21.5.darwin-amd64.tar.gz",
+          "sha256": ""
+        }
+      }
+    },
+    "rust": {
+      "name": "Rust",
+      "version": "1.75.0",
+      "executable": "rustc",
+      "package_manager": {
+        "name": "cargo",
+        "executable": "cargo",
+        "install_cmd": ["install"]
+      },
+      "downloads": {
+        "linux-x86_64": {
+          "url": "https://static.rust-lang.org/dist/rust-1.75.0-x86_64-unknown-linux-gnu.tar.gz",
+          "sha256": ""
+        },
+        "windows-x86_64": {
+          "url": "https://static.rust-lang.org/dist/rust-1.75.0-x86_64-pc-windows-msvc.tar.gz",
+          "sha256": ""
+        },
+        "darwin-x86_64": {
+          "url": "https://static.rust-lang.org/dist/rust-1.75.0-x86_64-apple-darwin.tar.gz",
+          "sha256": ""
+        }
+      }
+    },
+    "ruby": {
+      "name": "Ruby",
+      "version": "3.2.2",
+      "executable": "ruby",
+      "package_manager": {
+        "name": "gem",
+        "executable": "gem",
+        "install_cmd": ["install"]
+      },
+      "downloads": {
+        "linux-x86_64": {
+          "url": "https://cache.ruby-lang.org/pub/ruby/3.2/ruby-3.2.2.tar.gz",
+          "sha256": ""
+        },
+        "windows-x86_64": {
+          "url": "https://github.com/oneclick/rubyinstaller2/releases/download/RubyInstaller-3.2.2-1/rubyinstaller-3.2.2-1-x64.7z",
+          "sha256": ""
+        },
+        "darwin-x86_64": {
+          "url": "https://cache.ruby-lang.org/pub/ruby/3.2/ruby-3.2.2.tar.gz",
           "sha256": ""
         }
       }
